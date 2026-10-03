@@ -1,5 +1,5 @@
-import Landing from './features/home/Landing.jsx';
+import AppRoutes from './routes/AppRoutes';
 
 export default function App() {
-  return <Landing />;
+  return <AppRoutes />;
 }
