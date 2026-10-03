@@ -3,8 +3,5 @@ package com.smartengine.auth.dto;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
-public record LoginRequest(
-    @Email @NotBlank String email,
-    @NotBlank String motDePasse
-) {
+public record ForgotPasswordRequest(@Email @NotBlank String email) {
 }

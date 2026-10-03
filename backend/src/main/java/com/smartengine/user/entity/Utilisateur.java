@@ -41,6 +41,12 @@ public class Utilisateur {
     @Column(nullable = false)
     private Boolean actif = true;
 
+    @Column(name = "reset_password_token", length = 120)
+    private String resetPasswordToken;
+
+    @Column(name = "reset_password_expires_at")
+    private LocalDateTime resetPasswordExpiresAt;
+
     @Column(name = "date_creation", nullable = false)
     private LocalDateTime dateCreation;
 

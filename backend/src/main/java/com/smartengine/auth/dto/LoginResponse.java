@@ -1,4 +1,6 @@
 package com.smartengine.auth.dto;
 
-public record LoginResponse(String token) {
+import com.smartengine.user.dto.UserResponse;
+
+public record LoginResponse(String token, UserResponse user) {
 }

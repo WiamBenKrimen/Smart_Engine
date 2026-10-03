@@ -3,6 +3,8 @@ import PrivateRoute from './PrivateRoute';
 import AdminRoute from './AdminRoute';
 import LandingPage from '../features/landing/pages/LandingPage';
 import LoginPage from '../features/auth/pages/LoginPage';
+import ForgotPasswordPage from '../features/auth/pages/ForgotPasswordPage';
+import ResetPasswordPage from '../features/auth/pages/ResetPasswordPage';
 import WorkspaceSelectorPage from '../features/workspaces/pages/WorkspaceSelectorPage';
 import AdminLayout from '../layouts/AdminLayout';
 import MainLayout from '../layouts/MainLayout';
@@ -26,6 +28,8 @@ export default function AppRoutes() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       <Route element={<PrivateRoute />}>
         <Route path="/workspace-select" element={<WorkspaceSelectorPage />} />
