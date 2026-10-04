@@ -1,5 +1,6 @@
 package com.smartengine.auth.controller;
 
+import com.smartengine.auth.dto.ChangePasswordRequest;
 import com.smartengine.auth.dto.ForgotPasswordRequest;
 import com.smartengine.auth.dto.ForgotPasswordResponse;
 import com.smartengine.auth.dto.LoginRequest;
@@ -43,6 +44,15 @@ public class AuthController {
     @PostMapping("/reset-password")
     public ResponseEntity<MessageResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
+        return ResponseEntity.ok(new MessageResponse("Mot de passe modifie avec succes."));
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<MessageResponse> changePassword(
+        Principal principal,
+        @Valid @RequestBody ChangePasswordRequest request
+    ) {
+        authService.changePassword(principal.getName(), request);
         return ResponseEntity.ok(new MessageResponse("Mot de passe modifie avec succes."));
     }
 }

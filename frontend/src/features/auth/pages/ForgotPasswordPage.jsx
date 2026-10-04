@@ -7,21 +7,18 @@ import SmartEngineLogo from '../../../components/SmartEngineLogo';
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
-  const [resetToken, setResetToken] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async event => {
     event.preventDefault();
     setMessage('');
-    setResetToken('');
     setError('');
     setLoading(true);
 
     try {
       const response = await authApi.forgotPassword({ email });
       setMessage(response.message);
-      setResetToken(response.resetToken || '');
     } catch (err) {
       setError(err.message || 'Impossible de preparer la reinitialisation.');
     } finally {
@@ -41,19 +38,10 @@ export default function ForgotPasswordPage() {
         </div>
 
         <h1 className="text-2xl font-bold text-[#172033] mb-2">Mot de passe oublie</h1>
-        <p className="text-sm text-[#8898AA] mb-6">Entrez votre email pour generer un lien de reinitialisation.</p>
+        <p className="text-sm text-[#8898AA] mb-6">Entrez votre email pour recevoir un mot de passe temporaire.</p>
 
         {error && <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-xl p-3 mb-4 text-sm text-[#DC2626]">{error}</div>}
         {message && <div className="bg-[#ECFDF5] border border-[#BBF7D0] rounded-xl p-3 mb-4 text-sm text-[#166534]">{message}</div>}
-
-        {resetToken && (
-          <div className="bg-[#EBF2F9] border border-[#C5D9EE] rounded-xl p-3 mb-4 text-sm text-[#1F4E79] break-all">
-            Token dev: {resetToken}
-            <Link className="block mt-2 font-semibold hover:text-[#172033]" to={`/reset-password?token=${encodeURIComponent(resetToken)}`}>
-              Continuer vers la reinitialisation
-            </Link>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
@@ -72,7 +60,7 @@ export default function ForgotPasswordPage() {
           </div>
 
           <button type="submit" disabled={loading} className="w-full bg-[#1F4E79] hover:bg-[#172033] text-white font-semibold py-3.5 rounded-xl disabled:opacity-60">
-            {loading ? 'Envoi...' : 'Generer le lien'}
+            {loading ? 'Envoi...' : 'Envoyer le mot de passe temporaire'}
           </button>
         </form>
 

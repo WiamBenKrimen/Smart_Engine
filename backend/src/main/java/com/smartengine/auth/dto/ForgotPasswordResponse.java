@@ -1,4 +1,4 @@
 package com.smartengine.auth.dto;
 
-public record ForgotPasswordResponse(String message, String resetToken) {
+public record ForgotPasswordResponse(String message) {
 }

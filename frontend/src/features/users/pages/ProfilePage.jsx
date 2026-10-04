@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { UserCircle, Lock, Link2, Check, Eye, EyeOff, AlertCircle, Camera } from 'lucide-react';
 import { useAuth } from '../../../app/providers/AuthProvider';
+import { authApi } from '../../../api/authApi';
 function Toast({ msg, onClose }) {
     useState(() => { setTimeout(onClose, 2500); });
     return (<div className="fixed bottom-6 right-6 flex items-center gap-2 bg-[#16A34A] text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium z-50">
@@ -34,24 +35,30 @@ export default function Profile() {
     function saveInfo() {
         showToast('Profil mis à jour');
     }
-    function savePassword() {
+    async function savePassword() {
         setPwdError('');
         if (!currentPwd) {
             setPwdError('Entrez votre mot de passe actuel');
             return;
         }
-        if (newPwd.length < 6) {
-            setPwdError('Le nouveau mot de passe doit contenir au moins 6 caractères');
+        if (newPwd.length < 8) {
+            setPwdError('Le nouveau mot de passe doit contenir au moins 8 caractères');
             return;
         }
         if (newPwd !== confirmPwd) {
             setPwdError('Les mots de passe ne correspondent pas');
             return;
         }
-        setCurrentPwd('');
-        setNewPwd('');
-        setConfirmPwd('');
-        showToast('Mot de passe modifié');
+        try {
+            await authApi.changePassword({ currentPassword: currentPwd, newPassword: newPwd });
+            setCurrentPwd('');
+            setNewPwd('');
+            setConfirmPwd('');
+            showToast('Mot de passe modifié');
+        }
+        catch (error) {
+            setPwdError(error.message || 'Impossible de modifier le mot de passe');
+        }
     }
     function addAccount() {
         if (!newAccountEmail.trim())
@@ -166,7 +173,7 @@ export default function Profile() {
                   <div className="flex gap-1 mb-1">
                     {[1, 2, 3, 4].map(i => (<div key={i} className={`h-1 flex-1 rounded-full ${newPwd.length >= i * 3 ? i <= 2 ? 'bg-[#EA580C]' : i === 3 ? 'bg-[#EAB308]' : 'bg-[#16A34A]' : 'bg-[#D1D9E0]'}`}/>))}
                   </div>
-                  <p className="text-[10px] text-[#8898AA]">{newPwd.length < 6 ? 'Trop court' : newPwd.length < 9 ? 'Faible' : newPwd.length < 12 ? 'Moyen' : 'Fort'}</p>
+                  <p className="text-[10px] text-[#8898AA]">{newPwd.length < 8 ? 'Trop court' : newPwd.length < 10 ? 'Faible' : newPwd.length < 12 ? 'Moyen' : 'Fort'}</p>
                 </div>)}
 
               <div className="flex justify-end pt-2 border-t border-[#F4F6F8]">
