@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, ListTodo, User, AlertTriangle, CheckCircle, Users, ArrowLeft, ThumbsUp, ThumbsDown, Clock, LogOut, UserCircle, FilePlus, ArrowRight, ScrollText } from 'lucide-react';
-import { WORKSPACES, USERS, NOTIFICATIONS } from '../../../app/mockData';
+import { USERS, NOTIFICATIONS } from '../../../app/mockData';
+import { workspaceApi } from '../../../api/workspaceApi';
 import { useAuth } from '../../../app/providers/AuthProvider';
 import { useRequests } from '../../../app/providers/RequestProvider';
 import StatusBadge from '../../../components/StatusBadge';
@@ -87,11 +88,46 @@ export default function WorkspacePage() {
     const { getWorkspaceTasks, tasks, approveTask, rejectTask, claimTask, getMyRequests } = useRequests();
     const [tab, setTab] = useState('overview');
     const [notifs, setNotifs] = useState(NOTIFICATIONS.filter(n => n.userId === currentUser?.id));
-    const workspace = WORKSPACES.find(w => w.id === id);
+    const [workspace, setWorkspace] = useState(null);
+    const [loadingWorkspace, setLoadingWorkspace] = useState(true);
+
+    useEffect(() => {
+        let cancelled = false;
+        setLoadingWorkspace(true);
+        workspaceApi.getById(id)
+            .then(ws => {
+                if (!cancelled) setWorkspace(ws);
+            })
+            .catch(() => {
+                if (!cancelled) setWorkspace(null);
+            })
+            .finally(() => {
+                if (!cancelled) setLoadingWorkspace(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [id]);
+
+    if (loadingWorkspace) {
+        return (<div className="min-h-screen flex items-center justify-center text-center text-sm text-[#8898AA]">
+        Chargement de l'espace...
+      </div>);
+    }
+
     if (!workspace) {
         return (<div className="min-h-screen flex items-center justify-center text-center">
         <div>
           <p className="text-[#8898AA] mb-2">Workspace introuvable</p>
+          <button onClick={() => navigate('/employee')} className="text-[#1F4E79] hover:underline text-sm">Retour</button>
+        </div>
+      </div>);
+    }
+    if (!workspace.active) {
+        return (<div className="min-h-screen flex items-center justify-center text-center">
+        <div className="max-w-sm">
+          <p className="text-[#172033] font-semibold mb-2">Workspace desactive</p>
+          <p className="text-[#8898AA] text-sm mb-4">Cet espace n'est plus accessible pour le traitement. Les donnees restent disponibles cote administration.</p>
           <button onClick={() => navigate('/employee')} className="text-[#1F4E79] hover:underline text-sm">Retour</button>
         </div>
       </div>);

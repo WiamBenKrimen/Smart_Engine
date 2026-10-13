@@ -1,12 +1,13 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { authApi } from '../../api/authApi';
-import { WORKSPACES } from '../mockData';
+import { workspaceApi } from '../../api/workspaceApi';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [activeWorkspace, setActiveWorkspace] = useState(null);
+  const [workspaces, setWorkspaces] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -17,7 +18,11 @@ export function AuthProvider({ children }) {
     }
 
     authApi.currentUser()
-      .then(user => setCurrentUser(user))
+      .then(async user => {
+        const workspaceRows = await workspaceApi.list().catch(() => []);
+        setCurrentUser(user);
+        setWorkspaces(workspaceRows);
+      })
       .catch(() => {
         localStorage.removeItem('smart-engine-token');
         setCurrentUser(null);
@@ -29,7 +34,9 @@ export function AuthProvider({ children }) {
     try {
       const response = await authApi.login({ email, motDePasse: password });
       localStorage.setItem('smart-engine-token', response.token);
+      const workspaceRows = await workspaceApi.list().catch(() => []);
       setCurrentUser(response.user);
+      setWorkspaces(workspaceRows);
       setActiveWorkspace(null);
       return { success: true, user: response.user };
     } catch (error) {
@@ -40,12 +47,13 @@ export function AuthProvider({ children }) {
   const logout = () => {
     localStorage.removeItem('smart-engine-token');
     setCurrentUser(null);
+    setWorkspaces([]);
     setActiveWorkspace(null);
   };
 
   const getUserWorkspaces = () => {
     if (!currentUser) return [];
-    return WORKSPACES.filter(ws => currentUser.workspaceIds?.includes(ws.id) && ws.active);
+    return workspaces.filter(ws => currentUser.workspaceIds?.includes(ws.id) && ws.active);
   };
 
   return (
