@@ -49,6 +49,11 @@ public class ChampFormulaire {
     @Column(name = "options_json", columnDefinition = "json")
     private String optionsJson;
 
+    @Column(length = 500)
+    private String placeholder;
+    @Column(name = "help_text", length = 1000)
+    private String helpText;
+
     @Column(name = "ordre_affichage", nullable = false)
     private Integer ordreAffichage = 0;
 }

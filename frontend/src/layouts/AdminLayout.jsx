@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import AdminSidebar from './components/AdminSidebar';
 import { NOTIFICATIONS } from '../app/mockData';
 import { useState } from 'react';
@@ -7,10 +7,11 @@ import ContextSwitcher from '../components/ContextSwitcher';
 import { useAuth } from '../app/providers/AuthProvider';
 export default function AdminLayout() {
     const { currentUser } = useAuth();
+    const isProcessCreator = useLocation().pathname === '/admin/process-creator';
     const [notifs, setNotifs] = useState(NOTIFICATIONS.filter(n => n.userId === currentUser?.id));
     return (<div className="app-canvas flex h-screen overflow-hidden">
       <AdminSidebar />
-      <div className="relative z-10 flex flex-1 flex-col overflow-hidden">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex h-16 flex-shrink-0 items-center justify-between gap-3 border-b border-white/70 bg-white/75 px-5 backdrop-blur-xl lg:px-8">
           <ContextSwitcher />
           <div className="flex items-center gap-3">
@@ -27,7 +28,7 @@ export default function AdminLayout() {
             </div>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto px-5 py-7 lg:px-8 lg:py-8">
+        <main className={isProcessCreator ? "min-h-0 min-w-0 flex-1 overflow-hidden" : "min-h-0 flex-1 overflow-y-auto px-5 py-7 lg:px-8 lg:py-8"}>
           <Outlet />
         </main>
       </div>

@@ -3,14 +3,22 @@ import { appConfig } from '../app/appConfig';
 async function request(path, options = {}) {
   const token = localStorage.getItem('smart-engine-token');
   const isFormData = options.body instanceof FormData;
-  const response = await fetch(`${appConfig.apiUrl}${path}`, {
-    ...options,
-    headers: {
-      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
+  let response;
+  try {
+    response = await fetch(`${appConfig.apiUrl}${path}`, {
+      ...options,
+      headers: {
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error('Serveur inaccessible. Vérifiez que le backend Smart Engine est démarré et que son adresse est correcte.');
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Une erreur est survenue.' }));

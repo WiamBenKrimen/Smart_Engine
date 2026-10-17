@@ -1,9 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Check, X, ChevronRight, ArrowLeft, Eye, FileText, Building2, Users, Save, AlertTriangle, Info, CheckCircle, ZoomIn, ZoomOut, Undo2, Redo2, Copy, GripVertical, Type, Hash, DollarSign, Calendar, List, Paperclip, CheckSquare, AlignLeft, ChevronDown, Settings, GitBranch } from 'lucide-react';
-import { WORKSPACES, FORMS, USERS, WORKFLOWS } from '../../../app/mockData';
+import { USERS, WORKFLOWS } from '../../../app/mockData';
 import { useProcesses } from '../../../app/providers/ProcessProvider';
 import ProcessIcon from '../components/ProcessIcon';
+import { workspaceApi } from '../../../api/workspaceApi';
+import { formApi } from '../../../api/formApi';
+import { apiClient } from '../../../api/apiClient';
+import { useAuth } from '../../../app/providers/AuthProvider';
 // ─── CANVAS CONSTANTS ─────────────────────────────────────────────────────────
 const NW = 160, NH = 56;
 const CDW = 176, CDH = 112;
@@ -753,9 +757,76 @@ export default function ProcessCreator() {
     const navigate = useNavigate();
     const { addProcess } = useProcesses();
     const [step, setStep] = useState(1);
+    const creatorRef = useRef(null);
+    useEffect(() => {
+        creatorRef.current?.querySelector('[data-process-content]')?.scrollTo({ top: 0, behavior: 'instant' });
+    }, [step]);
     const [maxStep, setMaxStep] = useState(1);
-    const [draft, setDraft] = useState({ ...DEMO_DRAFT });
-    const [workspaces, setWorkspaces] = useState([...WORKSPACES]);
+    const { currentUser } = useAuth();
+    const storageKey = 'smart-engine-process-draft:' + currentUser.id;
+    const [initial] = useState(() => {
+        try {
+            const v = JSON.parse(localStorage.getItem(storageKey));
+            if (typeof v?.draft?.name === 'string' && ['formFields', 'workspaceIds', 'wfNodes', 'wfEdges'].every(k => Array.isArray(v.draft[k]))) return v;
+        } catch { /* Start a new draft if storage is unavailable. */ }
+        return { draft: { ...structuredClone(DEMO_DRAFT), name: '', description: '', workspaceIds: [], formFields: [], wfNodes: [], wfEdges: [] }, workspaces: [] };
+    });
+    const [draft, setDraft] = useState(initial.draft);
+    const [draftId, setDraftId] = useState(null);
+    const [savedFormId, setSavedFormId] = useState(null);
+    const [draftReady, setDraftReady] = useState(false);
+    const [draftLoadError, setDraftLoadError] = useState('');
+    const [savingDraft, setSavingDraft] = useState(false);
+    const draftBusy = useRef(false);
+    const [forms, setForms] = useState([]);
+    const [formCatalogError, setFormCatalogError] = useState('');
+    const [draftReload, setDraftReload] = useState(0);
+    useEffect(() => {
+        let cancelled = false;
+        setDraftReady(false);
+        setDraftLoadError('');
+        apiClient.get('/process-drafts/latest').then(saved => {
+            if (cancelled) return;
+            if (saved) {
+                setDraft(d => ({ ...d, ...saved }));
+                setSelectedFieldId(saved.formFields[0]?.id || null);
+                setDraftId(saved.id);
+                setSavedFormId(saved.formId || null);
+                setMaxStep(saved.savedStep >= 3 ? 4 : saved.savedStep);
+            }
+            setDraftReady(true);
+        }).catch(error => { if (!cancelled) setDraftLoadError(error.message); });
+        formApi.list().then(rows => { if (!cancelled) { setForms(rows); setFormCatalogError(''); } })
+            .catch(error => { if (!cancelled) setFormCatalogError(error.message); });
+        return () => { cancelled = true; };
+    }, [draftReload]);
+    const [workspaces, setWorkspaces] = useState([]);
+    const [allUsers, setAllUsers] = useState([]);
+    const [loadingWorkspaces, setLoadingWorkspaces] = useState(true);
+    const [workspaceError, setWorkspaceError] = useState('');
+    const [mutationError, setMutationError] = useState('');
+    const [savingWorkspace, setSavingWorkspace] = useState(false);
+    const workspaceBusy = useRef(false);
+    const [workspaceReload, setWorkspaceReload] = useState(0);
+    function normalizeWorkspace(w) {
+        const colors = ['#1F4E79', '#7C3AED', '#EA580C', '#0EA5E9', '#16A34A'];
+        const hash = (w.code || w.name || '').split('').reduce((sum, c) => sum + c.charCodeAt(0), 0);
+        return { ...w, memberIds: w.memberIds || [], color: colors[hash % colors.length] };
+    }
+    useEffect(() => {
+        let cancelled = false;
+        setLoadingWorkspaces(true);
+        setWorkspaceError('');
+        Promise.all([workspaceApi.list(), workspaceApi.listUsers()]).then(([rows, users]) => {
+            if (cancelled) return;
+            setWorkspaces(rows.map(normalizeWorkspace));
+            setAllUsers(users);
+        }).catch(error => {
+            if (!cancelled) { setWorkspaces([]); setWorkspaceError(error.message || 'Chargement impossible.'); }
+        }).finally(() => { if (!cancelled) setLoadingWorkspaces(false); });
+        return () => { cancelled = true; };
+    }, [workspaceReload]);
+    const [storageError, setStorageError] = useState('');
     // Form builder state
     const [selectedFieldId, setSelectedFieldId] = useState(draft.formFields[0]?.id ?? null);
     const [draggedFieldId, setDraggedFieldId] = useState(null);
@@ -772,14 +843,55 @@ export default function ProcessCreator() {
     const [publishModal, setPublishModal] = useState(false);
     const [published, setPublished] = useState(false);
     const [toast, setToast] = useState(null);
+    async function persistDraft(completedStep = Math.min(step, 3)) {
+        if (!draftReady || draftBusy.current) return false;
+        if (!draft.name.trim()) { setStorageError('Le nom du processus est obligatoire.'); return false; }
+        draftBusy.current = true;
+        setSavingDraft(true);
+        setStorageError('');
+        try {
+            const payload = {
+                name: draft.name.trim(), description: draft.description, icon: draft.icon,
+                workspaceIds: draft.workspaceIds, formMode: draft.formMode,
+                formRefId: draft.formRefId, formFields: draft.formFields,
+                savedStep: completedStep,
+            };
+            const saved = draftId
+                ? await apiClient.put('/process-drafts/' + draftId, payload)
+                : await apiClient.post('/process-drafts', payload);
+            setDraftId(saved.id);
+            setSavedFormId(saved.formId || null);
+            try { localStorage.removeItem(storageKey); } catch { /* Server save succeeded. */ }
+            return true;
+        } catch (error) { setStorageError(error.message || 'Sauvegarde en base impossible.'); return false; }
+        finally { draftBusy.current = false; setSavingDraft(false); }
+    }
+    function formErrors() {
+        const errors = [], keys = new Set();
+        if (!draft.formFields.length) errors.push('Ajoutez au moins un champ.');
+        if (draft.formMode === 'reuse' && !draft.formRefId) errors.push('Choisissez un formulaire existant.');
+        draft.formFields.forEach((f, i) => {
+            const prefix = 'Champ ' + (i + 1) + ' : ';
+            if (!f.label.trim()) errors.push(prefix + 'le libellé est obligatoire.');
+            if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(f.key)) errors.push(prefix + 'clé invalide : utilisez des lettres, chiffres et underscores, en commençant par une lettre.');
+            if (keys.has(f.key)) errors.push(prefix + 'cette clé existe déjà.');
+            keys.add(f.key);
+            if (f.type === 'SELECT' && !(f.options || []).some(o => o.trim())) errors.push(prefix + 'ajoutez une option.');
+        });
+        return errors;
+    }
     function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 2500); }
     function goTo(s) {
+        if (s > 1 && !draft.name.trim()) return;
+        if (s > 2 && (loadingWorkspaces || workspaceError || !workspaces.some(w => w.active && draft.workspaceIds.includes(w.id)))) return;
+        if (s > 3 && formErrors().length) return;
         setStep(s);
         setMaxStep(m => Math.max(m, s));
     }
-    function nextStep() {
-        if (step < 6)
-            goTo((step + 1));
+    async function nextStep() {
+        if (step >= 6 || !canContinue() || savingDraft) return;
+        if (step <= 3 && !await persistDraft(step)) return;
+        goTo(step + 1);
     }
     function prevStep() {
         if (step > 1)
@@ -787,12 +899,13 @@ export default function ProcessCreator() {
     }
     // Can continue logic
     function canContinue() {
+        if (!draftReady || savingDraft) return false;
         if (step === 1)
             return draft.name.trim().length > 0;
         if (step === 2)
-            return workspaces.some(w => w.active);
+            return !loadingWorkspaces && !workspaceError && workspaces.some(w => w.active && draft.workspaceIds.includes(w.id));
         if (step === 3)
-            return draft.formFields.length > 0;
+            return formErrors().length === 0;
         if (step === 4)
             return draft.wfNodes.length > 0;
         if (step === 5)
@@ -824,8 +937,11 @@ export default function ProcessCreator() {
     // Form field helpers
     function addField(type) {
         const label = FIELD_TYPES.find(t => t.type === type).label;
+        const base = toKey(label);
+        let key = base, suffix = 2;
+        while (draft.formFields.some(f => f.key === key)) key = base + '_' + suffix++;
         const newField = {
-            id: 'ff-' + uid(), type, label, key: toKey(label), required: false, placeholder: '', helpText: '', options: [], order: draft.formFields.length,
+            id: 'ff-' + uid(), type, label, key, required: false, placeholder: '', helpText: '', options: [], order: draft.formFields.length,
         };
         const updated = [...draft.formFields, newField];
         setDraft(d => ({ ...d, formFields: updated }));
@@ -835,7 +951,9 @@ export default function ProcessCreator() {
     function deleteField(id) { setDraft(d => ({ ...d, formFields: d.formFields.filter(f => f.id !== id) })); if (selectedFieldId === id)
         setSelectedFieldId(null); }
     function duplicateField(field) {
-        const copy = { ...field, id: 'ff-' + uid(), label: field.label + ' (copie)', key: field.key + '_copie', order: draft.formFields.length };
+        let key = field.key + '_copie', suffix = 2;
+        while (draft.formFields.some(f => f.key === key)) key = field.key + '_copie_' + suffix++;
+        const copy = { ...field, options: [...(field.options || [])], id: 'ff-' + uid(), label: field.label + ' (copie)', key, order: draft.formFields.length };
         setDraft(d => ({ ...d, formFields: [...d.formFields, copy] }));
         setSelectedFieldId(copy.id);
     }
@@ -845,27 +963,55 @@ export default function ProcessCreator() {
         const arr = [...draft.formFields];
         const fromIdx = arr.findIndex(f => f.id === fromId);
         const toIdx = arr.findIndex(f => f.id === toId);
+        if (fromIdx < 0 || toIdx < 0) return;
         const [moved] = arr.splice(fromIdx, 1);
         arr.splice(toIdx, 0, moved);
         setDraft(d => ({ ...d, formFields: arr.map((f, i) => ({ ...f, order: i })) }));
     }
     // Workspace helpers
-    function createWorkspace() {
-        if (!newWsForm.name.trim())
-            return;
-        const ws = { id: 'ws-' + uid(), name: newWsForm.name.trim(), code: newWsForm.code.trim().toUpperCase() || newWsForm.name.slice(0, 4).toUpperCase(), description: newWsForm.description.trim(), active: true, memberIds: [], color: newWsForm.color };
-        setWorkspaces(w => [...w, ws]);
-        setCreateWsModal(false);
-        setNewWsForm({ name: '', code: '', description: '', color: '#1F4E79' });
-        showToast('Workspace créé');
+    async function createWorkspace() {
+        if (!newWsForm.name.trim() || workspaceBusy.current) return;
+        workspaceBusy.current = true;
+        setSavingWorkspace(true);
+        setMutationError('');
+        try {
+            const row = await workspaceApi.create({
+                name: newWsForm.name.trim(),
+                code: newWsForm.code.trim().toUpperCase() || toKey(newWsForm.name).slice(0, 80).toUpperCase(),
+                description: newWsForm.description.trim(), active: true,
+            });
+            const ws = normalizeWorkspace(row);
+            setWorkspaces(rows => [...rows, ws]);
+            setDraft(d => ({ ...d, workspaceIds: [...d.workspaceIds, ws.id] }));
+            setCreateWsModal(false);
+            setNewWsForm({ name: '', code: '', description: '', color: '#1F4E79' });
+            showToast('Workspace enregistré en base');
+        } catch (error) { setMutationError(error.message || 'Création impossible.'); }
+        finally { workspaceBusy.current = false; setSavingWorkspace(false); }
+    }
+    async function toggleMember(ws, user, included) {
+        if (workspaceBusy.current) return;
+        workspaceBusy.current = true;
+        setSavingWorkspace(true);
+        setMutationError('');
+        try {
+            const updated = included
+                ? await workspaceApi.removeMember(ws.id, user.id)
+                : await workspaceApi.addMember(ws.id, user.id);
+            setWorkspaces(rows => rows.map(w => w.id === ws.id ? normalizeWorkspace(updated) : w));
+        } catch (error) { setMutationError(error.message || 'Modification impossible.'); }
+        finally { workspaceBusy.current = false; setSavingWorkspace(false); }
     }
     // Publish
     function doPublish(status) {
         addProcess({
             id: 'p-' + uid(),
-            name: draft.name,
+            ...structuredClone(draft),
+            workspaces: structuredClone(workspaces.filter(w => draft.workspaceIds.includes(w.id))),
+            name: draft.name.trim(),
             description: draft.description,
-            formId: 'f-' + uid(),
+            formId: savedFormId,
+            draftId,
             workflowId: 'wf-' + uid(),
             status,
             icon: draft.icon,
@@ -873,6 +1019,7 @@ export default function ProcessCreator() {
         });
         setPublishModal(false);
         setPublished(true);
+        try { localStorage.removeItem(storageKey); } catch { /* Process remains in memory. */ }
     }
     const checks = computeChecks(draft);
     const allChecksOk = checks.every(c => c.ok);
@@ -880,23 +1027,25 @@ export default function ProcessCreator() {
     const managedWs = workspaces.find(w => w.id === manageMembersWsId);
     // ── PROGRESS BAR ──────────────────────────────────────────────────────────
     function renderProgress() {
-        return (<div className="sticky top-0 z-20 bg-white border-b border-[#D1D9E0] -mx-6 -mt-6 px-6 py-4">
-        <div className="flex items-center gap-1 mb-3">
+        return (<div className="relative z-20 shrink-0 bg-white border-b border-[#D1D9E0] px-5 py-4 sm:px-8">
+        <div className="flex min-w-0 flex-wrap items-center gap-1 mb-3">
           <button onClick={() => navigate('/admin/processes')} className="flex items-center gap-1.5 text-xs text-[#8898AA] hover:text-[#172033] transition-colors mr-2">
             <ArrowLeft size={13}/> Processus
           </button>
           <span className="text-[#D1D9E0]">/</span>
           <span className="text-xs text-[#172033] font-medium ml-2">{draft.name || 'Nouveau Processus'}</span>
-          <span className="ml-2 px-2 py-0.5 bg-[#F4F6F8] border border-[#D1D9E0] text-[10px] text-[#8898AA] rounded-full font-medium">BROUILLON</span>
+          <span className="ml-2 px-2 py-0.5 bg-[#F4F6F8] border border-[#D1D9E0] text-[10px] text-[#8898AA] rounded-full font-medium">BROUILLON{draftId ? ' #' + draftId : ''}</span>
+          {savingDraft && <span role="status" className="text-xs text-[#8898AA]">Enregistrement...</span>}
         </div>
-        <div className="flex items-center gap-1">
+        {storageError && <p role="alert" className="text-xs text-red-700 mb-2">{storageError}</p>}
+        <div className="flex items-center gap-1 overflow-x-auto">
           {STEP_META.map((s, i) => {
                 const done = maxStep > s.n;
                 const active = step === s.n;
                 const reachable = done || s.n <= maxStep;
-                return (<div key={s.n} className="flex items-center">
+                return (<div key={s.n} className="flex shrink-0 items-center">
                 {i > 0 && <div className={`w-8 h-0.5 mx-1 ${done ? 'bg-[#1F4E79]' : 'bg-[#D1D9E0]'}`}/>}
-                <button onClick={() => reachable ? goTo(s.n) : undefined} disabled={!reachable} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${active ? 'bg-[#1F4E79] text-white shadow-sm' :
+                <button onClick={async () => { if (!reachable || savingDraft) return; if (s.n > step && step <= 3 && !await persistDraft(step)) return; goTo(s.n); }} disabled={!reachable || !draftReady || savingDraft} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${active ? 'bg-[#1F4E79] text-white shadow-sm' :
                         done ? 'bg-[#EBF2F9] text-[#1F4E79] hover:bg-[#C5D9EE] cursor-pointer' :
                             'text-[#8898AA] cursor-not-allowed'}`}>
                   {done ? <Check size={11}/> : <span className="text-[10px]">{s.n}</span>}
@@ -910,7 +1059,7 @@ export default function ProcessCreator() {
     // ── STEP 1: INFORMATIONS ──────────────────────────────────────────────────
     const ICONS = ['💸', '📋', '🛒', '🏖️', '📄', '💼', '🔧', '🏢', '📊', '🔑', '💳', '📦'];
     function renderStep1() {
-        return (<div className="max-w-xl mx-auto space-y-6">
+        return (<div className="mx-auto w-full max-w-3xl space-y-6 rounded-2xl border border-[#D1D9E0] bg-white p-5 shadow-sm sm:p-8">
         <div>
           <h2 className="text-lg font-bold text-[#172033] mb-1">Informations générales</h2>
           <p className="text-sm text-[#8898AA]">Un Processus associe un <strong>Formulaire</strong> de saisie et un <strong>Workflow</strong> de validation.</p>
@@ -937,18 +1086,21 @@ export default function ProcessCreator() {
     }
     // ── STEP 2: WORKSPACES ───────────────────────────────────────────────────
     function renderStep2() {
-        return (<div className="space-y-5">
-        <div className="flex items-start justify-between">
+        return (<div className="mx-auto w-full max-w-7xl space-y-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-[#172033] mb-1">Workspaces</h2>
             <p className="text-sm text-[#8898AA]">Les Workspaces regroupent les validateurs selon leur rôle dans l'organisation.</p>
           </div>
-          <button onClick={() => setCreateWsModal(true)} className="flex items-center gap-1.5 px-3 py-2 bg-[#1F4E79] text-white text-xs font-medium rounded-lg hover:bg-[#172033] transition-colors">
+          <button onClick={() => { setMutationError(''); setCreateWsModal(true); }} disabled={loadingWorkspaces || !!workspaceError || savingWorkspace} className="flex shrink-0 items-center whitespace-nowrap gap-1.5 px-3 py-2 bg-[#1F4E79] text-white text-xs font-medium rounded-lg hover:bg-[#172033] transition-colors">
             <Plus size={13}/> Créer un Workspace
           </button>
         </div>
 
-        {!workspaces.some(w => w.active) && (<div className="bg-[#FFEDD5] border border-[#EA580C]/30 rounded-xl p-4 flex items-start gap-3">
+        <p className="text-xs text-[#4A5568]">Associez au moins un workspace actif au processus.</p>
+        {loadingWorkspaces && <p role="status" className="text-sm text-[#8898AA]">Chargement des workspaces...</p>}
+        {workspaceError && <div role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{workspaceError} <button onClick={() => setWorkspaceReload(n => n + 1)} className="underline">Réessayer</button></div>}
+        {!loadingWorkspaces && !workspaceError && !workspaces.some(w => w.active) && (<div className="bg-[#FFEDD5] border border-[#EA580C]/30 rounded-xl p-4 flex items-start gap-3">
             <AlertTriangle size={15} className="text-[#EA580C] mt-0.5 flex-shrink-0"/>
             <p className="text-xs text-[#7C2D12]">Aucun workspace actif. Créez-en un ou activez un workspace existant pour continuer.</p>
           </div>)}
@@ -965,13 +1117,17 @@ export default function ProcessCreator() {
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${ws.active ? 'bg-[#DCFCE7] text-[#14532D]' : 'bg-[#F3F4F6] text-[#6B7280]'}`}>{ws.active ? 'Actif' : 'Inactif'}</span>
               </div>
+              <label className="flex items-center gap-2 text-sm text-[#172033] mb-3">
+                <input type="checkbox" disabled={!ws.active} checked={draft.workspaceIds.includes(ws.id)} onChange={e => setDraft(d => ({ ...d, workspaceIds: e.target.checked ? [...d.workspaceIds, ws.id] : d.workspaceIds.filter(id => id !== ws.id) }))} />
+                Associer au processus
+              </label>
               <p className="text-xs text-[#4A5568] mb-3 line-clamp-2">{ws.description}</p>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-xs text-[#8898AA]">
                   <Users size={12}/>
                   <span>{ws.memberIds.length} membre{ws.memberIds.length !== 1 ? 's' : ''}</span>
                 </div>
-                <button onClick={() => setManageMembersWsId(ws.id)} className="text-xs text-[#1F4E79] hover:underline font-medium">Gérer les membres</button>
+                <button onClick={() => { setMutationError(''); setManageMembersWsId(ws.id); }} className="text-xs text-[#1F4E79] hover:underline font-medium">Gérer les membres</button>
               </div>
             </div>))}
         </div>
@@ -980,14 +1136,14 @@ export default function ProcessCreator() {
     // ── STEP 3: FORMULAIRE ───────────────────────────────────────────────────
     function renderStep3() {
         const sortedFields = [...draft.formFields].sort((a, b) => a.order - b.order);
-        return (<div className="flex flex-col h-full gap-0">
+        return (<div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-0">
         {/* Mode toggle + preview */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-5 flex shrink-0 flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-[#172033] mb-0.5">Formulaire</h2>
             <p className="text-sm text-[#8898AA]">Définissez les champs que l'employé devra remplir.</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-lg border border-[#D1D9E0] overflow-hidden">
               {['new', 'reuse'].map(m => (<button key={m} onClick={() => setDraft(d => ({ ...d, formMode: m }))} className={`px-3 py-1.5 text-xs font-medium transition-colors ${draft.formMode === m ? 'bg-[#1F4E79] text-white' : 'text-[#4A5568] hover:bg-[#F4F6F8]'}`}>
                   {m === 'new' ? 'Créer nouveau' : 'Réutiliser existant'}
@@ -999,22 +1155,23 @@ export default function ProcessCreator() {
           </div>
         </div>
 
+        {formCatalogError && <p role="alert" className="mb-3 text-sm text-red-700">{formCatalogError} <button className="underline" onClick={() => setDraftReload(n => n + 1)}>Réessayer</button></p>}
+        {formErrors().length > 0 && <div role="status" className="mb-4 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">{formErrors().map(error => <p key={error}>{error}</p>)}</div>}
         {draft.formMode === 'reuse' ? (<div>
             <select className="w-full max-w-sm px-3 py-2 text-sm border border-[#D1D9E0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1F4E79]/30 bg-white" value={draft.formRefId || ''} onChange={e => {
-                    const form = FORMS.find(f => f.id === e.target.value);
-                    if (form)
-                        setDraft(d => ({ ...d, formRefId: form.id, formFields: form.fields.map(f => ({ ...f, options: f.options || [] })) }));
+                    const form = forms.find(f => f.id === e.target.value);
+                    setDraft(d => ({ ...d, formRefId: form?.id || null, formFields: form ? form.fields.map(f => ({ ...f, options: [...(f.options || [])] })) : [] }));
                 }}>
               <option value="">Sélectionner un formulaire…</option>
-              {FORMS.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              {forms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
-          </div>) : (<div className="flex flex-1 border border-[#D1D9E0] rounded-xl overflow-hidden bg-white" style={{ minHeight: 480 }}>
+          </div>) : (<div className="grid flex-1 grid-cols-1 rounded-2xl border border-[#D1D9E0] bg-white shadow-sm xl:grid-cols-[176px_minmax(240px,1fr)_288px]" style={{ minHeight: 480 }}>
             {/* Left: palette */}
-            <div className="w-44 flex-shrink-0 border-r border-[#D1D9E0] bg-[#F4F6F8] flex flex-col">
+            <div className="flex min-w-0 flex-col rounded-t-2xl border-b border-[#D1D9E0] bg-[#F8FAFC] xl:rounded-l-2xl xl:rounded-tr-none xl:border-r xl:border-b-0">
               <div className="px-3 py-3 border-b border-[#D1D9E0]">
                 <p className="text-[10px] uppercase tracking-wider text-[#8898AA] font-semibold">Types de champs</p>
               </div>
-              <div className="p-3 space-y-1.5 flex-1 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4 xl:flex xl:flex-col">
                 {FIELD_TYPES.map(ft => (<button key={ft.type} onClick={() => addField(ft.type)} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#172033] border border-[#D1D9E0] rounded-lg bg-white hover:border-[#1F4E79] hover:bg-[#EBF2F9] transition-colors text-left">
                     <span style={{ color: ft.color }}><FieldTypeIcon type={ft.type} size={13}/></span>
                     {ft.label}
@@ -1023,12 +1180,12 @@ export default function ProcessCreator() {
             </div>
 
             {/* Center: field list */}
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#D1D9E0]">
+            <div className="flex min-w-0 flex-col">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#D1D9E0] px-4 py-3">
                 <p className="text-xs font-medium text-[#172033]">{sortedFields.length} champ{sortedFields.length !== 1 ? 's' : ''}</p>
                 {draft.formFields.length === 0 && <p className="text-xs text-[#8898AA]">Cliquez sur un type pour ajouter</p>}
               </div>
-              <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+              <div className="flex-1 space-y-2 p-4">
                 {sortedFields.length === 0 && (<div className="flex flex-col items-center justify-center h-40 text-center">
                     <List size={28} className="text-[#D1D9E0] mb-2"/>
                     <p className="text-xs text-[#8898AA]">Choisissez un type de champ dans la palette</p>
@@ -1036,7 +1193,7 @@ export default function ProcessCreator() {
                 {sortedFields.map(f => {
                     const ft = FIELD_TYPES.find(t => t.type === f.type);
                     return (<div key={f.id} draggable onDragStart={() => setDraggedFieldId(f.id)} onDragOver={e => { e.preventDefault(); setDragOverFieldId(f.id); }} onDrop={() => { if (draggedFieldId)
-                        reorderFields(draggedFieldId, f.id); setDraggedFieldId(null); setDragOverFieldId(null); }} onDragEnd={() => { setDraggedFieldId(null); setDragOverFieldId(null); }} onClick={() => setSelectedFieldId(f.id)} className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border cursor-pointer transition-all ${selectedFieldId === f.id ? 'border-[#1F4E79] bg-[#EBF2F9]' : 'border-[#D1D9E0] bg-white hover:border-[#1F4E79]/50'} ${dragOverFieldId === f.id && draggedFieldId !== f.id ? 'border-[#1F4E79] border-dashed' : ''}`}>
+                        reorderFields(draggedFieldId, f.id); setDraggedFieldId(null); setDragOverFieldId(null); }} onDragEnd={() => { setDraggedFieldId(null); setDragOverFieldId(null); }} onClick={() => setSelectedFieldId(f.id)} className={`group flex items-center gap-2.5 px-3 py-3 rounded-lg border cursor-pointer transition-all ${selectedFieldId === f.id ? 'border-[#1F4E79] bg-[#EBF2F9]' : 'border-[#D1D9E0] bg-white hover:border-[#1F4E79]/50'} ${dragOverFieldId === f.id && draggedFieldId !== f.id ? 'border-[#1F4E79] border-dashed' : ''}`}>
                       <GripVertical size={12} className="text-[#C5D9EE] flex-shrink-0 cursor-grab"/>
                       <span style={{ color: ft.color }} className="flex-shrink-0"><FieldTypeIcon type={f.type} size={13}/></span>
                       <div className="flex-1 min-w-0">
@@ -1044,7 +1201,7 @@ export default function ProcessCreator() {
                         <p className="text-[10px] text-[#8898AA] font-mono truncate">{f.key}</p>
                       </div>
                       {f.required && <span className="text-[10px] text-[#DC2626] font-bold flex-shrink-0">*</span>}
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
+                      <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 flex-shrink-0">
                         <button onClick={e => { e.stopPropagation(); duplicateField(f); }} className="p-1 text-[#8898AA] hover:text-[#1F4E79] rounded" title="Dupliquer"><Copy size={11}/></button>
                         <button onClick={e => { e.stopPropagation(); deleteField(f.id); }} className="p-1 text-[#8898AA] hover:text-[#DC2626] rounded" title="Supprimer"><Trash2 size={11}/></button>
                       </div>
@@ -1054,7 +1211,7 @@ export default function ProcessCreator() {
             </div>
 
             {/* Right: properties panel */}
-            <div className="w-64 flex-shrink-0 border-l border-[#D1D9E0]">
+            <div className="min-w-0 border-t border-[#D1D9E0] xl:border-t-0 xl:border-l">
               {selectedField ? (<FieldPropsPanel field={selectedField} onChange={updateField} onDelete={() => deleteField(selectedField.id)}/>) : (<div className="h-full flex flex-col items-center justify-center text-center px-4">
                   <Settings size={28} className="text-[#D1D9E0] mb-3"/>
                   <p className="text-xs text-[#8898AA]">Sélectionnez un champ<br />pour modifier ses propriétés</p>
@@ -1146,7 +1303,7 @@ export default function ProcessCreator() {
             <button onClick={() => navigate('/admin/processes')} className="px-5 py-2.5 bg-[#1F4E79] text-white text-sm font-medium rounded-xl hover:bg-[#172033] transition-colors">
               Voir dans le catalogue
             </button>
-            <button onClick={() => { setDraft({ name: '', description: '', icon: '📋', formMode: 'new', formRefId: null, formFields: [], wfMode: 'new', wfRefId: null, wfNodes: [], wfEdges: [] }); setStep(1); setMaxStep(1); setPublished(false); }} className="px-5 py-2.5 border border-[#D1D9E0] text-sm font-medium text-[#4A5568] rounded-xl hover:bg-[#F4F6F8] transition-colors">
+            <button onClick={() => { setDraftId(null); setSavedFormId(null); setDraft({ workspaceIds: [], name: '', description: '', icon: '📋', formMode: 'new', formRefId: null, formFields: [], wfMode: 'new', wfRefId: null, wfNodes: [], wfEdges: [] }); setStep(1); setMaxStep(1); setPublished(false); }} className="px-5 py-2.5 border border-[#D1D9E0] text-sm font-medium text-[#4A5568] rounded-xl hover:bg-[#F4F6F8] transition-colors">
               Créer un autre processus
             </button>
           </div>
@@ -1245,30 +1402,32 @@ export default function ProcessCreator() {
     }
     // ── MAIN RENDER ───────────────────────────────────────────────────────────
     const isFullCanvas = step === 3 || step === 4;
-    return (<div className="flex flex-col min-h-full -m-6">
+    return (<div ref={creatorRef} className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       {/* Progress bar */}
       {renderProgress()}
+      {draftLoadError && <div role="alert" className="shrink-0 bg-red-50 p-4 text-sm text-red-700">{draftLoadError} <button className="underline" onClick={() => setDraftReload(n => n + 1)}>Réessayer</button></div>}
+      {!draftReady && !draftLoadError && <p role="status" className="shrink-0 p-4 text-sm">Chargement du brouillon...</p>}
 
       {/* Step content */}
-      <div className={`flex-1 overflow-y-auto px-6 py-6 pb-24 ${isFullCanvas ? 'flex flex-col' : ''}`}>
+      <fieldset disabled={!draftReady || savingDraft} data-process-content className={`min-h-0 min-w-0 flex-1 overflow-y-auto px-5 py-8 sm:px-8 ${isFullCanvas ? 'flex flex-col' : ''}`}>
         {step === 1 && renderStep1()}
         {step === 2 && renderStep2()}
         {step === 3 && <div className="flex flex-col flex-1">{renderStep3()}</div>}
         {step === 4 && <div className="flex flex-col flex-1">{renderStep4()}</div>}
         {step === 5 && renderStep5()}
         {step === 6 && renderStep6()}
-      </div>
+      </fieldset>
 
       {/* Fixed bottom action bar */}
-      {!published && (<div className="fixed bottom-0 right-0 bg-white border-t border-[#D1D9E0] px-6 py-4 z-30 flex items-center gap-3" style={{ left: 240 }}>
+      {!published && (<div className="relative z-20 flex shrink-0 flex-wrap items-center gap-2 border-t border-[#D1D9E0] bg-white px-5 py-4 sm:gap-3 sm:px-8">
           <button onClick={prevStep} disabled={step === 1} className="flex items-center gap-1.5 px-4 py-2 text-sm text-[#4A5568] border border-[#D1D9E0] rounded-xl hover:bg-[#F4F6F8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
             <ArrowLeft size={14}/> Retour
           </button>
-          <button onClick={() => { doPublish('DRAFT'); showToast('Brouillon enregistré'); }} className="flex items-center gap-1.5 px-4 py-2 text-sm text-[#4A5568] border border-[#D1D9E0] rounded-xl hover:bg-[#F4F6F8] transition-colors">
+          <button onClick={async () => { if (await persistDraft()) showToast('Brouillon enregistré en base'); }} disabled={!draftReady || savingDraft} className="flex items-center gap-1.5 px-4 py-2 text-sm text-[#4A5568] border border-[#D1D9E0] rounded-xl hover:bg-[#F4F6F8] transition-colors">
             <Save size={14}/> Brouillon
           </button>
           <div className="flex-1"/>
-          <div className="flex items-center gap-1.5 text-xs text-[#8898AA]">
+          <div className="hidden items-center gap-1.5 text-xs text-[#8898AA] sm:flex">
             <span>Étape {step} sur 6</span>
             <span className="w-24 h-1.5 bg-[#EAEEF2] rounded-full overflow-hidden"><span className="block h-full bg-[#1F4E79] rounded-full transition-all" style={{ width: `${(step / 6) * 100}%` }}/></span>
           </div>
@@ -1286,6 +1445,7 @@ export default function ProcessCreator() {
               <h3 className="text-sm font-semibold text-[#172033]">Créer un Workspace</h3>
               <button onClick={() => setCreateWsModal(false)} className="text-[#8898AA] hover:text-[#172033]"><X size={16}/></button>
             </div>
+            {mutationError && <p role="alert" className="text-xs text-red-700 mb-3">{mutationError}</p>}
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-[#4A5568] mb-1">Nom <span className="text-[#DC2626]">*</span></label>
@@ -1299,16 +1459,11 @@ export default function ProcessCreator() {
                 <label className="block text-xs font-medium text-[#4A5568] mb-1">Description</label>
                 <textarea className="w-full px-3 py-2 text-sm border border-[#D1D9E0] rounded-lg resize-none h-16 focus:outline-none focus:ring-2 focus:ring-[#1F4E79]/30" placeholder="Rôle de ce workspace…" value={newWsForm.description} onChange={e => setNewWsForm(f => ({ ...f, description: e.target.value }))}/>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-[#4A5568] mb-2">Couleur</label>
-                <div className="flex gap-2">
-                  {['#1F4E79', '#7C3AED', '#16A34A', '#EA580C', '#0EA5E9', '#DC2626'].map(c => (<button key={c} onClick={() => setNewWsForm(f => ({ ...f, color: c }))} className={`w-7 h-7 rounded-lg border-2 transition-all ${newWsForm.color === c ? 'border-[#172033] scale-110' : 'border-transparent'}`} style={{ background: c }}/>))}
-                </div>
-              </div>
+
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setCreateWsModal(false)} className="flex-1 px-4 py-2 text-sm text-[#4A5568] border border-[#D1D9E0] rounded-lg hover:bg-[#F4F6F8]">Annuler</button>
-              <button onClick={createWorkspace} disabled={!newWsForm.name.trim()} className="flex-1 px-4 py-2 bg-[#1F4E79] text-white text-sm font-medium rounded-lg hover:bg-[#172033] disabled:opacity-40">Créer</button>
+              <button onClick={createWorkspace} disabled={!newWsForm.name.trim() || savingWorkspace} className="flex-1 px-4 py-2 bg-[#1F4E79] text-white text-sm font-medium rounded-lg hover:bg-[#172033] disabled:opacity-40">Créer</button>
             </div>
           </div>
         </div>)}
@@ -1323,15 +1478,12 @@ export default function ProcessCreator() {
               </div>
               <button onClick={() => setManageMembersWsId(null)} className="text-[#8898AA] hover:text-[#172033]"><X size={16}/></button>
             </div>
+            {mutationError && <p role="alert" className="px-4 text-xs text-red-700">{mutationError}</p>}
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {USERS.map(u => {
+              {allUsers.map(u => {
                 const inWs = managedWs.memberIds.includes(u.id);
                 return (<label key={u.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-[#F4F6F8] cursor-pointer">
-                    <input type="checkbox" checked={inWs} onChange={() => {
-                        setWorkspaces(wsList => wsList.map(w => w.id === managedWs.id ? {
-                            ...w, memberIds: inWs ? w.memberIds.filter(id => id !== u.id) : [...w.memberIds, u.id]
-                        } : w));
-                    }} className="w-4 h-4 accent-[#1F4E79] flex-shrink-0"/>
+                    <input type="checkbox" checked={inWs} disabled={savingWorkspace || (!u.active && !inWs)} onChange={() => toggleMember(managedWs, u, inWs)} className="w-4 h-4 accent-[#1F4E79] flex-shrink-0"/>
                     <div className="w-8 h-8 bg-[#EBF2F9] rounded-full flex items-center justify-center text-xs font-bold text-[#1F4E79] flex-shrink-0">
                       {u.name.split(' ').map(p => p[0]).join('').slice(0, 2)}
                     </div>
@@ -1343,7 +1495,7 @@ export default function ProcessCreator() {
             })}
             </div>
             <div className="p-4 border-t border-[#D1D9E0]">
-              <button onClick={() => setManageMembersWsId(null)} className="w-full px-4 py-2 bg-[#1F4E79] text-white text-sm font-medium rounded-lg hover:bg-[#172033]">Enregistrer</button>
+              <button onClick={() => setManageMembersWsId(null)} className="w-full px-4 py-2 bg-[#1F4E79] text-white text-sm font-medium rounded-lg hover:bg-[#172033]">Fermer</button>
             </div>
           </div>
         </div>)}
