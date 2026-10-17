@@ -67,31 +67,31 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- ============================================================
 
 INSERT INTO utilisateurs
-(id, prenom, nom, email, mot_de_passe, est_admin, actif)
+(id, prenom, nom, email, mot_de_passe, est_admin, actif, date_creation)
 VALUES
     (1, 'Admin', 'Smart Engine', 'admin@smartengine.com',
      '$2y$10$SFYWWUMiXHznLDWoOe83juyn9V/incNaV3qw0JoGkXq3K0RfRbN9m',
-     TRUE, TRUE),
+     TRUE, TRUE, '2026-09-20 08:00:00'),
 
     (2, 'Mohamed', 'Alaoui', 'mohamed@smartengine.com',
      '$2y$10$qold7nlV3WA41SSPHfrZB.PKRtcoNEpSYZuVApsaxXGMn7cVoXXI.',
-     FALSE, TRUE),
+     FALSE, TRUE, '2026-09-20 08:05:00'),
 
     (3, 'Sara', 'El Mansouri', 'sara@smartengine.com',
      '$2y$10$qold7nlV3WA41SSPHfrZB.PKRtcoNEpSYZuVApsaxXGMn7cVoXXI.',
-     FALSE, TRUE),
+     FALSE, TRUE, '2026-09-20 08:10:00'),
 
     (4, 'Nadia', 'Benali', 'nadia@smartengine.com',
      '$2y$10$qold7nlV3WA41SSPHfrZB.PKRtcoNEpSYZuVApsaxXGMn7cVoXXI.',
-     FALSE, TRUE),
+     FALSE, TRUE, '2026-09-20 08:15:00'),
 
     (5, 'Ahmed', 'Idrissi', 'ahmed@smartengine.com',
      '$2y$10$qold7nlV3WA41SSPHfrZB.PKRtcoNEpSYZuVApsaxXGMn7cVoXXI.',
-     FALSE, TRUE),
+     FALSE, TRUE, '2026-09-20 08:20:00'),
 
     (6, 'Youssef', 'Amrani', 'youssef@smartengine.com',
      '$2y$10$qold7nlV3WA41SSPHfrZB.PKRtcoNEpSYZuVApsaxXGMn7cVoXXI.',
-     FALSE, TRUE);
+     FALSE, TRUE, '2026-09-20 08:25:00');
 
 -- ============================================================
 -- 2. ESPACES / WORKSPACES
@@ -101,40 +101,40 @@ VALUES
 -- ============================================================
 
 INSERT INTO espaces
-(id, nom, code, description, actif)
+(id, nom, code, description, actif, date_creation)
 VALUES
-    (1, 'Manager', 'MANAGER', 'Espace des managers', TRUE),
-    (2, 'Ressources Humaines', 'RH', 'Espace RH', TRUE),
-    (3, 'Direction', 'DIRECTION', 'Espace de la direction', TRUE),
-    (4, 'Finance', 'FINANCE', 'Espace du service financier', TRUE);
+    (1, 'Manager', 'MANAGER', 'Espace des managers', TRUE, '2026-09-20 09:00:00'),
+    (2, 'Ressources Humaines', 'RH', 'Espace RH', TRUE, '2026-09-20 09:05:00'),
+    (3, 'Direction', 'DIRECTION', 'Espace de la direction', TRUE, '2026-09-20 09:10:00'),
+    (4, 'Finance', 'FINANCE', 'Espace du service financier', TRUE, '2026-09-20 09:15:00');
 
 -- ============================================================
 -- 3. MEMBRES DES ESPACES
 -- ============================================================
 
-INSERT INTO membres_espace (espace_id, utilisateur_id)
+INSERT INTO membres_espace (espace_id, utilisateur_id, date_ajout)
 VALUES
-    (1, 3), -- Sara -> Manager
-    (1, 5), -- Ahmed -> Manager
-    (2, 6), -- Youssef -> RH
-    (3, 5), -- Ahmed -> Direction
-    (4, 4); -- Nadia -> Finance
+    (1, 3, '2026-09-20 10:00:00'), -- Sara -> Manager
+    (1, 5, '2026-09-20 10:05:00'), -- Ahmed -> Manager
+    (2, 6, '2026-09-20 10:10:00'), -- Youssef -> RH
+    (3, 5, '2026-09-20 10:15:00'), -- Ahmed -> Direction
+    (4, 4, '2026-09-20 10:20:00'); -- Nadia -> Finance
 
 -- ============================================================
 -- 4. FORMULAIRES
 -- ============================================================
 
 INSERT INTO formulaires
-(id, nom, description, actif)
+(id, nom, description, actif, date_creation)
 VALUES
     (1, 'Demande de remboursement',
-     'Formulaire de remboursement des depenses.', TRUE),
+     'Formulaire de remboursement des depenses.', TRUE, '2026-09-20 11:00:00'),
 
     (2, 'Demande de conge',
-     'Formulaire de demande de conge.', TRUE),
+     'Formulaire de demande de conge.', TRUE, '2026-09-20 11:05:00'),
 
     (3, 'Demande de recrutement',
-     'Formulaire interne de demande de recrutement.', TRUE);
+     'Formulaire interne de demande de recrutement.', TRUE, '2026-09-20 11:10:00');
 
 -- ============================================================
 -- 5. CHAMPS DES FORMULAIRES
@@ -223,19 +223,19 @@ VALUES
 -- ============================================================
 
 INSERT INTO workflows
-(id, nom, description, statut)
+(id, nom, description, statut, date_creation)
 VALUES
     (1, 'Workflow remboursement',
      'Validation d un remboursement selon le montant.',
-     'PUBLIE'),
+     'PUBLIE', '2026-09-20 12:00:00'),
 
     (2, 'Workflow conge',
      'Validation d une demande de conge.',
-     'PUBLIE'),
+     'PUBLIE', '2026-09-20 12:05:00'),
 
     (3, 'Workflow recrutement',
      'Validation interne d une demande de recrutement.',
-     'PUBLIE');
+     'PUBLIE', '2026-09-20 12:10:00');
 
 -- ============================================================
 -- 7. NOEUDS - WORKFLOW REMBOURSEMENT
@@ -474,19 +474,19 @@ VALUES
 -- ============================================================
 
 INSERT INTO processus
-(id, nom, description, formulaire_id, workflow_id, statut)
+(id, nom, description, formulaire_id, workflow_id, statut, date_creation)
 VALUES
     (1, 'Demande de remboursement',
      'Processus de remboursement.',
-     1, 1, 'PUBLIE'),
+     1, 1, 'PUBLIE', '2026-09-20 13:00:00'),
 
     (2, 'Demande de conge',
      'Processus de demande de conge.',
-     2, 2, 'PUBLIE'),
+     2, 2, 'PUBLIE', '2026-09-20 13:05:00'),
 
     (3, 'Demande de recrutement',
      'Processus de demande de recrutement.',
-     3, 3, 'PUBLIE');
+     3, 3, 'PUBLIE', '2026-09-20 13:10:00');
 
 -- ============================================================
 -- 14. DEMANDES DE DEMO

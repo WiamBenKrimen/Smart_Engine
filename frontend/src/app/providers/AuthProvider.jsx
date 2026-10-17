@@ -40,7 +40,11 @@ export function AuthProvider({ children }) {
       setActiveWorkspace(null);
       return { success: true, user: response.user };
     } catch (error) {
-      return { success: false, error: error.message || 'Email ou mot de passe incorrect.' };
+      const msg = error.message || '';
+      const friendlyError = msg.includes('ACCOUNT_DISABLED')
+        ? 'Votre compte a été désactivé. Veuillez contacter un administrateur.'
+        : msg || 'Email ou mot de passe incorrect.';
+      return { success: false, error: friendlyError };
     }
   };
 

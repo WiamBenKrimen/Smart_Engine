@@ -41,7 +41,11 @@ public class AuthService {
         Utilisateur user = utilisateurRepository.findByEmail(request.email().toLowerCase())
             .orElseThrow(() -> new BadCredentialsException("Email ou mot de passe incorrect."));
 
-        if (!Boolean.TRUE.equals(user.getActif()) || !passwordEncoder.matches(request.motDePasse(), user.getMotDePasse())) {
+        if (!Boolean.TRUE.equals(user.getActif())) {
+            throw new BadCredentialsException("ACCOUNT_DISABLED");
+        }
+
+        if (!passwordEncoder.matches(request.motDePasse(), user.getMotDePasse())) {
             throw new BadCredentialsException("Email ou mot de passe incorrect.");
         }
 
@@ -130,7 +134,8 @@ public class AuthService {
             role,
             workspaceIds,
             user.getActif(),
-            avatar
+            avatar,
+            user.getDateCreation()
         );
     }
 

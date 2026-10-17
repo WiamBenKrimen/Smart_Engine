@@ -11,4 +11,6 @@ public interface MembreEspaceRepository extends JpaRepository<MembreEspace, Memb
     List<MembreEspace> findByEspace_Id(Long espaceId);
 
     void deleteByEspace_IdAndUtilisateur_Id(Long espaceId, Long utilisateurId);
+
+    void deleteByUtilisateur_Id(Long utilisateurId);
 }

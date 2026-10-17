@@ -1,5 +1,7 @@
 package com.smartengine.user.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public record UserResponse(
@@ -11,6 +13,8 @@ public record UserResponse(
     String role,
     List<String> workspaceIds,
     Boolean active,
-    String avatar
+    String avatar,
+    @JsonProperty("createdAt")
+    LocalDateTime createdAt
 ) {
 }
