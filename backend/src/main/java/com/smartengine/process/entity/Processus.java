@@ -51,10 +51,35 @@ public class Processus {
     @Column(name = "date_creation", nullable = false)
     private LocalDateTime dateCreation;
 
+    @Column(length = 30)
+    private String icon = "📋";
+
+    @Column(name = "workspaces_json", columnDefinition = "json")
+    private String workspacesJson;
+
     @PrePersist
     void prePersist() {
         if (dateCreation == null) {
             dateCreation = LocalDateTime.now();
         }
     }
+
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getNom() { return nom; }
+    public void setNom(String nom) { this.nom = nom; }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+    public Formulaire getFormulaire() { return formulaire; }
+    public void setFormulaire(Formulaire formulaire) { this.formulaire = formulaire; }
+    public Workflow getWorkflow() { return workflow; }
+    public void setWorkflow(Workflow workflow) { this.workflow = workflow; }
+    public WorkflowStatut getStatut() { return statut; }
+    public void setStatut(WorkflowStatut statut) { this.statut = statut; }
+    public LocalDateTime getDateCreation() { return dateCreation; }
+    public void setDateCreation(LocalDateTime dateCreation) { this.dateCreation = dateCreation; }
+    public String getIcon() { return icon; }
+    public void setIcon(String icon) { this.icon = icon; }
+    public String getWorkspacesJson() { return workspacesJson; }
+    public void setWorkspacesJson(String workspacesJson) { this.workspacesJson = workspacesJson; }
 }

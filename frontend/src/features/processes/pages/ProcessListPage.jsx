@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Archive, Eye, GitBranch, FormInput, X, Check, AlertCircle } from 'lucide-react';
+import { Plus, Archive, Eye, GitBranch, FormInput, X, Check, AlertCircle, Globe } from 'lucide-react';
 import { FORMS, WORKFLOWS } from '../../../app/mockData';
 import { useProcesses } from '../../../app/providers/ProcessProvider';
+import { processApi } from '../../../api/processApi';
 import ProcessIcon from '../components/ProcessIcon';
 function Toast({ msg, type, onClose }) {
     useState(() => { setTimeout(onClose, 2500); });
@@ -13,10 +14,15 @@ function Toast({ msg, type, onClose }) {
 const ICONS = ['🛒', '🏖️', '💳', '👥', '📋', '🏥', '🏢', '💼', '🎓', '🔧'];
 export default function ProcessManagement() {
     const navigate = useNavigate();
-    const { processes, addProcess, updateProcess } = useProcesses();
+    const { processes, loading, reloadProcesses, updateProcess } = useProcesses();
     const [showModal, setShowModal] = useState(false);
     const [detailId, setDetailId] = useState(null);
     const [toast, setToast] = useState(null);
+
+    useEffect(() => {
+        reloadProcesses();
+    }, [reloadProcesses]);
+
     // Form state
     const [fName, setFName] = useState('');
     const [fDesc, setFDesc] = useState('');
@@ -24,11 +30,21 @@ export default function ProcessManagement() {
     const [fWfId, setFWfId] = useState(WORKFLOWS.filter(w => w.status === 'PUBLISHED')[0]?.id ?? WORKFLOWS[0]?.id ?? '');
     const [fIcon, setFIcon] = useState(ICONS[0]);
     const publishedWfs = WORKFLOWS.filter(w => w.status === 'PUBLISHED');
-    const publish = (id) => {
+    const publish = async (id) => {
+        try {
+            await processApi.publish(id);
+        } catch (e) {
+            console.warn('Backend publish call:', e);
+        }
         updateProcess(id, { status: 'PUBLISHED' });
         setToast({ msg: 'Processus publié et disponible dans le catalogue' });
     };
-    const archive = (id) => {
+    const archive = async (id) => {
+        try {
+            await processApi.archive(id);
+        } catch (e) {
+            console.warn('Backend archive call:', e);
+        }
         updateProcess(id, { status: 'ARCHIVED' });
         setToast({ msg: 'Processus archivé' });
     };
@@ -70,6 +86,21 @@ export default function ProcessManagement() {
       </div>
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {loading && processes.length === 0 && (
+          <div className="col-span-full py-16 text-center text-[#8898AA]">
+            <div className="w-8 h-8 border-2 border-[#1F4E79] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm font-medium">Chargement des processus depuis la base de données…</p>
+          </div>
+        )}
+        {!loading && processes.length === 0 && (
+          <div className="col-span-full py-16 text-center bg-white border border-[#D1D9E0] rounded-2xl p-8">
+            <p className="text-base font-semibold text-[#172033] mb-1">Aucun processus enregistré</p>
+            <p className="text-sm text-[#8898AA] mb-4">Créez votre premier processus en associant un formulaire et un workflow.</p>
+            <button onClick={() => navigate('/admin/process-creator')} className="inline-flex items-center gap-2 bg-[#1F4E79] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#172033] transition-colors">
+              <Plus className="w-4 h-4"/> Nouveau processus
+            </button>
+          </div>
+        )}
         {processes.map(p => {
             const form = FORMS.find(f => f.id === p.formId);
             const wf = WORKFLOWS.find(w => w.id === p.workflowId);
@@ -93,11 +124,11 @@ export default function ProcessManagement() {
               <div className="px-5 py-3 space-y-1.5">
                 <div className="flex items-center gap-2 text-xs text-[#4A5568]">
                   <FormInput className="w-3.5 h-3.5 text-[#8898AA]"/>
-                  <span className="font-medium">Formulaire :</span> <span>{form?.name ?? '—'}</span>
+                  <span className="font-medium">Formulaire :</span> <span>{p.formName || form?.name || '—'}</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-[#4A5568]">
                   <GitBranch className="w-3.5 h-3.5 text-[#8898AA]"/>
-                  <span className="font-medium">Workflow :</span> <span>{wf?.name ?? '—'}</span>
+                  <span className="font-medium">Workflow :</span> <span>{p.workflowName || wf?.name || '—'}</span>
                 </div>
                 <p className="text-xs text-[#8898AA]">Créé le {new Date(p.createdAt).toLocaleDateString('fr-FR')}</p>
               </div>
@@ -184,15 +215,17 @@ export default function ProcessManagement() {
                 <div className="flex items-center gap-2 text-sm">
                   <FormInput className="w-4 h-4 text-[#1F4E79]"/>
                   <span className="font-medium text-[#172033]">Formulaire :</span>
-                  <span className="text-[#4A5568]">{detailForm?.name ?? '—'}</span>
+                  <span className="text-[#4A5568]">{detailProc.formName || detailForm?.name || '—'}</span>
                 </div>
-                <div className="text-xs text-[#8898AA] pl-6">
-                  {detailForm?.fields.map(f => f.label).join(' · ') ?? ''}
-                </div>
+                {detailForm?.fields && (
+                  <div className="text-xs text-[#8898AA] pl-6">
+                    {detailForm.fields.map(f => f.label).join(' · ')}
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-sm mt-2">
                   <GitBranch className="w-4 h-4 text-[#1F4E79]"/>
                   <span className="font-medium text-[#172033]">Workflow :</span>
-                  <span className="text-[#4A5568]">{detailWf?.name ?? '—'}</span>
+                  <span className="text-[#4A5568]">{detailProc.workflowName || detailWf?.name || '—'}</span>
                 </div>
                 <div className="text-xs text-[#8898AA] pl-6">
                   {detailWf?.nodes.length ?? 0} nœuds · {detailWf?.edges.length ?? 0} connexions

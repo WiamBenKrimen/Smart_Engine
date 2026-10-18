@@ -16,9 +16,9 @@ public class ProcessDraftController {
         return result == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(result);
     }
     @GetMapping("/{id}")
-    public ObjectNode get(@PathVariable Long id, Principal user) { return service.get(id, user.getName()); }
+    public ObjectNode get(@PathVariable("id") Long id, Principal user) { return service.get(id, user.getName()); }
     @PostMapping
     public ObjectNode create(@Valid @RequestBody ProcessDraftRequest request, Principal user) { return service.save(null, user.getName(), request); }
     @PutMapping("/{id}")
-    public ObjectNode update(@PathVariable Long id, @Valid @RequestBody ProcessDraftRequest request, Principal user) { return service.save(id, user.getName(), request); }
+    public ObjectNode update(@PathVariable("id") Long id, @Valid @RequestBody ProcessDraftRequest request, Principal user) { return service.save(id, user.getName(), request); }
 }

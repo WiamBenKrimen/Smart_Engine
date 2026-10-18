@@ -16,7 +16,7 @@ public class FormCatalogController {
     @GetMapping @Transactional(readOnly=true)
     public List<Map<String, Object>> list() { return forms.findAll().stream().filter(f -> Boolean.TRUE.equals(f.getActif())).map(this::response).toList(); }
     @GetMapping("/{id}") @Transactional(readOnly=true)
-    public Map<String, Object> get(@PathVariable Long id) { return response(forms.findById(id).orElseThrow(() -> new EntityNotFoundException("Formulaire introuvable."))); }
+    public Map<String, Object> get(@PathVariable("id") Long id) { return response(forms.findById(id).orElseThrow(() -> new EntityNotFoundException("Formulaire introuvable."))); }
     private Map<String, Object> response(Formulaire form) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", form.getId().toString()); result.put("name", form.getNom()); result.put("description", form.getDescription());

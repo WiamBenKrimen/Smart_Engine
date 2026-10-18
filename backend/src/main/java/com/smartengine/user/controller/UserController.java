@@ -33,7 +33,7 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<UserResponse> getById(@PathVariable Long id) {
+    public ResponseEntity<UserResponse> getById(@PathVariable("id") Long id) {
         return ResponseEntity.ok(userService.getUserById(id));
     }
 
@@ -44,7 +44,7 @@ public class UserController {
 
     @PutMapping("/{id}")
     public ResponseEntity<UserResponse> update(
-        @PathVariable Long id,
+        @PathVariable("id") Long id,
         @Valid @RequestBody UserRequest request
     ) {
         return ResponseEntity.ok(userService.update(id, request));
@@ -52,14 +52,14 @@ public class UserController {
 
     @PatchMapping("/{id}/status")
     public ResponseEntity<UserResponse> updateStatus(
-        @PathVariable Long id,
+        @PathVariable("id") Long id,
         @RequestBody(required = false) UserStatusRequest request
     ) {
         return ResponseEntity.ok(userService.updateStatus(id, request));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<MessageResponse> delete(@PathVariable Long id) {
+    public ResponseEntity<MessageResponse> delete(@PathVariable("id") Long id) {
         userService.delete(id);
         return ResponseEntity.ok(new MessageResponse("Utilisateur supprimé avec succès."));
     }

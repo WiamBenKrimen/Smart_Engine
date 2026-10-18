@@ -19,7 +19,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<MessageResponse> handleValidation(MethodArgumentNotValidException ex) {
-        return ResponseEntity.badRequest().body(new MessageResponse("Veuillez verifier les champs saisis."));
+        String message = ex.getBindingResult().getFieldErrors().stream()
+                .map(err -> err.getField() + " : " + err.getDefaultMessage())
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("Veuillez vérifier les champs saisis.");
+        return ResponseEntity.badRequest().body(new MessageResponse(message));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

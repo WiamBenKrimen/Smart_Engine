@@ -40,4 +40,15 @@ public class LienWorkflow {
     @Enumerated(EnumType.STRING)
     @Column(name = "type_branche", nullable = false, length = 30)
     private TypeBranche typeBranche = TypeBranche.DEFAULT;
+
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public Workflow getWorkflow() { return workflow; }
+    public void setWorkflow(Workflow workflow) { this.workflow = workflow; }
+    public NoeudWorkflow getNoeudSource() { return noeudSource; }
+    public void setNoeudSource(NoeudWorkflow noeudSource) { this.noeudSource = noeudSource; }
+    public NoeudWorkflow getNoeudCible() { return noeudCible; }
+    public void setNoeudCible(NoeudWorkflow noeudCible) { this.noeudCible = noeudCible; }
+    public TypeBranche getTypeBranche() { return typeBranche; }
+    public void setTypeBranche(TypeBranche typeBranche) { this.typeBranche = typeBranche; }
 }

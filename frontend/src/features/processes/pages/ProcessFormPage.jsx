@@ -6,6 +6,8 @@ import { useProcesses } from '../../../app/providers/ProcessProvider';
 import ProcessIcon from '../components/ProcessIcon';
 import { workspaceApi } from '../../../api/workspaceApi';
 import { formApi } from '../../../api/formApi';
+import { processApi } from '../../../api/processApi';
+import { workflowApi } from '../../../api/workflowApi';
 import { apiClient } from '../../../api/apiClient';
 import { useAuth } from '../../../app/providers/AuthProvider';
 // ─── CANVAS CONSTANTS ─────────────────────────────────────────────────────────
@@ -367,9 +369,9 @@ function WfPropsPanel({ node, nodes, edges, workspaces, formFields, onUpdate, on
           <p className="text-[10px] uppercase tracking-wider text-[#8898AA] font-medium">{node.type}</p>
           <p className="text-sm font-semibold text-[#172033] truncate max-w-[140px]">{node.label}</p>
         </div>
-        {node.type !== 'START' && (<button onClick={() => onDelete(node.id)} className="p-1.5 text-[#8898AA] hover:text-[#DC2626] rounded hover:bg-[#FEE2E2] transition-colors">
-            <Trash2 size={13}/>
-          </button>)}
+        <button onClick={() => onDelete(node.id)} className="p-1.5 text-[#8898AA] hover:text-[#DC2626] rounded hover:bg-[#FEE2E2] transition-colors" title="Supprimer ce nœud">
+          <Trash2 size={13}/>
+        </button>
       </div>
       {status !== 'complete' && (<div className={`mx-3 mt-3 px-3 py-2 rounded-lg text-xs flex items-start gap-2 ${status === 'incomplete' ? 'bg-[#FFEDD5] text-[#7C2D12]' : 'bg-[#FEE2E2] text-[#7F1D1D]'}`}>
           <AlertTriangle size={12} className="mt-0.5 flex-shrink-0"/>
@@ -380,6 +382,13 @@ function WfPropsPanel({ node, nodes, edges, workspaces, formFields, onUpdate, on
           <label className="block text-xs font-medium text-[#4A5568] mb-1">Libellé</label>
           <input className="w-full px-3 py-2 text-sm border border-[#D1D9E0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79]/30" value={node.label} onChange={e => onUpdate({ ...node, label: e.target.value })}/>
         </div>
+
+        {node.type === 'START' && (
+          <div className="bg-[#DCFCE7] border border-[#16A34A]/30 rounded-lg p-3 text-xs text-[#14532D]">
+            <p className="font-semibold mb-1">Point de départ</p>
+            <p className="text-[11px] leading-relaxed">Ce nœud marque l'entrée du workflow. Glissez une connexion depuis son port vert inférieur (NEXT) vers votre première étape d'approbation ou condition.</p>
+          </div>
+        )}
 
         {node.type === 'APPROVAL' && (<>
             <div>
@@ -614,6 +623,7 @@ function WfCanvasEditor({ nodes, edges, workspaces, formFields, onCommit, onUndo
     const selectedNode = localNodes.find(n => n.id === selected) ?? null;
     // Palette node types
     const PALETTE_NODES = [
+        { type: 'START', label: 'Début', color: '#16A34A' },
         { type: 'APPROVAL', label: 'Approbation', color: '#1F4E79' },
         { type: 'CONDITION', label: 'Condition', color: '#EA580C' },
         { type: 'END', label: 'Fin', color: '#DC2626' },
@@ -625,14 +635,26 @@ function WfCanvasEditor({ nodes, edges, workspaces, formFields, onCommit, onUndo
           <p className="text-[10px] uppercase tracking-wider text-[#8898AA] font-semibold">Nœuds</p>
         </div>
         <div className="p-3 space-y-2 flex-1">
-          {PALETTE_NODES.map(p => (<button key={p.type} onClick={() => {
-                const cx = (300 - pan.x) / zoom;
-                const cy = (200 - pan.y) / zoom + localNodes.length * 80;
+          {PALETTE_NODES.map(p => {
+            const isStart = p.type === 'START';
+            const hasStart = localNodes.some(n => n.type === 'START');
+            const disabled = isStart && hasStart;
+            return (<button key={p.type} disabled={disabled} onClick={() => {
+                const cx = (280 - pan.x) / zoom;
+                const cy = (120 - pan.y) / zoom + (isStart ? 0 : localNodes.length * 70);
                 addNode(p.type, cx, cy);
-            }} className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-[#172033] border border-[#D1D9E0] rounded-lg hover:border-[#1F4E79] hover:bg-[#EBF2F9] transition-colors text-left">
-              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: p.color }}/>
-              {p.label}
-            </button>))}
+            }} className={`w-full flex items-center justify-between px-3 py-2 text-xs font-medium border rounded-lg transition-colors text-left ${
+                disabled
+                  ? 'opacity-40 border-[#D1D9E0] bg-[#F4F6F8] cursor-not-allowed'
+                  : 'text-[#172033] border-[#D1D9E0] hover:border-[#1F4E79] hover:bg-[#EBF2F9]'
+            }`} title={disabled ? 'Un seul nœud Début est autorisé' : `Ajouter un nœud ${p.label}`}>
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: p.color }}/>
+                {p.label}
+              </div>
+              {disabled && <span className="text-[10px] text-[#8898AA]">Placé</span>}
+            </button>);
+          })}
         </div>
         {/* Toolbar */}
         <div className="p-3 border-t border-[#D1D9E0] flex flex-col gap-2">
@@ -700,7 +722,7 @@ function WfCanvasEditor({ nodes, edges, workspaces, formFields, onCommit, onUndo
             {/* Void menu */}
             {voidMenu && (<div className="fixed bg-white border border-[#D1D9E0] rounded-xl shadow-lg py-1 z-50" style={{ left: Math.min(voidMenu.sx, window.innerWidth - 180), top: voidMenu.sy }}>
                 <p className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-[#8898AA] font-semibold border-b border-[#D1D9E0]">Ajouter un nœud</p>
-                {PALETTE_NODES.map(p => (<button key={p.type} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#172033] hover:bg-[#F4F6F8]" onClick={() => { addNode(p.type, voidMenu.cx, voidMenu.cy, voidMenu.fromNodeId, voidMenu.portLabel); setVoidMenu(null); }}>
+                {PALETTE_NODES.filter(p => p.type !== 'START').map(p => (<button key={p.type} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#172033] hover:bg-[#F4F6F8]" onClick={() => { addNode(p.type, voidMenu.cx, voidMenu.cy, voidMenu.fromNodeId, voidMenu.portLabel); setVoidMenu(null); }}>
                     <span className="w-2 h-2 rounded-full" style={{ background: p.color }}/>
                     {p.label}
                   </button>))}
@@ -780,7 +802,14 @@ export default function ProcessCreator() {
     const draftBusy = useRef(false);
     const [forms, setForms] = useState([]);
     const [formCatalogError, setFormCatalogError] = useState('');
+    const [workflowsCatalog, setWorkflowsCatalog] = useState([]);
+    const [workflowCatalogError, setWorkflowCatalogError] = useState('');
     const [draftReload, setDraftReload] = useState(0);
+
+    // Backend validation state for step 5
+    const [backendValidation, setBackendValidation] = useState({ valid: true, errors: [], warnings: [], checked: false });
+    const [validatingBackend, setValidatingBackend] = useState(false);
+
     useEffect(() => {
         let cancelled = false;
         setDraftReady(false);
@@ -788,18 +817,48 @@ export default function ProcessCreator() {
         apiClient.get('/process-drafts/latest').then(saved => {
             if (cancelled) return;
             if (saved) {
-                setDraft(d => ({ ...d, ...saved }));
-                setSelectedFieldId(saved.formFields[0]?.id || null);
+                setDraft(d => ({
+                    ...d,
+                    ...saved,
+                    wfMode: saved.wfMode || d.wfMode || 'new',
+                    wfRefId: saved.wfRefId || d.wfRefId || null,
+                    wfNodes: Array.isArray(saved.wfNodes) && saved.wfNodes.length > 0 ? saved.wfNodes : d.wfNodes,
+                    wfEdges: Array.isArray(saved.wfEdges) && saved.wfEdges.length > 0 ? saved.wfEdges : d.wfEdges,
+                }));
+                setSelectedFieldId(saved.formFields?.[0]?.id || null);
                 setDraftId(saved.id);
                 setSavedFormId(saved.formId || null);
-                setMaxStep(saved.savedStep >= 3 ? 4 : saved.savedStep);
+                setMaxStep(saved.savedStep >= 1 ? Math.min(saved.savedStep + 1, 6) : 1);
             }
             setDraftReady(true);
         }).catch(error => { if (!cancelled) setDraftLoadError(error.message); });
-        formApi.list().then(rows => { if (!cancelled) { setForms(rows); setFormCatalogError(''); } })
+        formApi.list().then(rows => { if (!cancelled) { setForms(rows || []); setFormCatalogError(''); } })
             .catch(error => { if (!cancelled) setFormCatalogError(error.message); });
+        workflowApi.list().then(rows => { if (!cancelled) { setWorkflowsCatalog(rows || []); setWorkflowCatalogError(''); } })
+            .catch(error => { if (!cancelled) setWorkflowCatalogError(error.message); });
         return () => { cancelled = true; };
     }, [draftReload]);
+
+    // Validation via backend on step 5
+    useEffect(() => {
+        if (step === 5 && draftReady) {
+            let active = true;
+            setValidatingBackend(true);
+            workflowApi.validate({
+                name: draft.name.trim() || 'Workflow',
+                description: draft.description,
+                nodes: draft.wfNodes,
+                edges: draft.wfEdges,
+            }).then(res => {
+                if (active) setBackendValidation({ ...res, checked: true });
+            }).catch(err => {
+                if (active) setBackendValidation({ valid: false, errors: [err.message || 'Erreur lors de la validation serveur.'], warnings: [], checked: true });
+            }).finally(() => {
+                if (active) setValidatingBackend(false);
+            });
+            return () => { active = false; };
+        }
+    }, [step, draftReady, draft.wfNodes, draft.wfEdges, draft.name, draft.description]);
     const [workspaces, setWorkspaces] = useState([]);
     const [allUsers, setAllUsers] = useState([]);
     const [loadingWorkspaces, setLoadingWorkspaces] = useState(true);
@@ -843,7 +902,7 @@ export default function ProcessCreator() {
     const [publishModal, setPublishModal] = useState(false);
     const [published, setPublished] = useState(false);
     const [toast, setToast] = useState(null);
-    async function persistDraft(completedStep = Math.min(step, 3)) {
+    async function persistDraft(completedStep = Math.min(step, 6)) {
         if (!draftReady || draftBusy.current) return false;
         if (!draft.name.trim()) { setStorageError('Le nom du processus est obligatoire.'); return false; }
         draftBusy.current = true;
@@ -855,6 +914,10 @@ export default function ProcessCreator() {
                 workspaceIds: draft.workspaceIds, formMode: draft.formMode,
                 formRefId: draft.formRefId, formFields: draft.formFields,
                 savedStep: completedStep,
+                wfMode: draft.wfMode || 'new',
+                wfRefId: draft.wfRefId,
+                wfNodes: draft.wfNodes || [],
+                wfEdges: draft.wfEdges || [],
             };
             const saved = draftId
                 ? await apiClient.put('/process-drafts/' + draftId, payload)
@@ -890,13 +953,59 @@ export default function ProcessCreator() {
     }
     async function nextStep() {
         if (step >= 6 || !canContinue() || savingDraft) return;
-        if (step <= 3 && !await persistDraft(step)) return;
+        if (step <= 5 && !await persistDraft(step)) return;
         goTo(step + 1);
     }
     function prevStep() {
         if (step > 1)
             setStep((step - 1));
     }
+
+    async function handleSelectWorkflow(wfId) {
+        if (!wfId) return;
+        try {
+            const fullWf = await workflowApi.getById(wfId);
+            if (fullWf && fullWf.nodes && fullWf.nodes.length > 0) {
+                setDraft(d => ({
+                    ...d,
+                    wfRefId: wfId.toString(),
+                    wfNodes: fullWf.nodes.map(n => ({
+                        id: n.id,
+                        type: n.type,
+                        label: n.label,
+                        x: Number(n.x) || 100,
+                        y: Number(n.y) || 100,
+                        workspaceId: n.workspaceId,
+                        slaHours: n.slaHours,
+                        conditionField: n.conditionField,
+                        conditionOperator: n.conditionOperator,
+                        conditionValue: n.conditionValue,
+                        endResult: n.endResult,
+                        assignedUserId: n.assignedUserId,
+                    })),
+                    wfEdges: (fullWf.edges || []).map(e => ({
+                        id: e.id,
+                        from: e.from,
+                        to: e.to,
+                        label: e.label,
+                    })),
+                }));
+                return;
+            }
+        } catch {
+            // Fallback to local workflows
+        }
+        const wf = WORKFLOWS.find(w => w.id === wfId);
+        if (wf) {
+            setDraft(d => ({
+                ...d,
+                wfRefId: wf.id,
+                wfNodes: wf.nodes.map(n => ({ ...n })),
+                wfEdges: wf.edges.map(e => ({ ...e })),
+            }));
+        }
+    }
+
     // Can continue logic
     function canContinue() {
         if (!draftReady || savingDraft) return false;
@@ -909,7 +1018,7 @@ export default function ProcessCreator() {
         if (step === 4)
             return draft.wfNodes.length > 0;
         if (step === 5)
-            return computeChecks(draft).every(c => c.ok);
+            return computeChecks(draft).every(c => c.ok) && (!backendValidation.checked || backendValidation.valid);
         return false;
     }
     // Workflow commit
@@ -1003,26 +1112,59 @@ export default function ProcessCreator() {
         finally { workspaceBusy.current = false; setSavingWorkspace(false); }
     }
     // Publish
-    function doPublish(status) {
-        addProcess({
-            id: 'p-' + uid(),
-            ...structuredClone(draft),
-            workspaces: structuredClone(workspaces.filter(w => draft.workspaceIds.includes(w.id))),
-            name: draft.name.trim(),
-            description: draft.description,
-            formId: savedFormId,
-            draftId,
-            workflowId: 'wf-' + uid(),
-            status,
-            icon: draft.icon,
-            createdAt: new Date().toISOString().split('T')[0],
-        });
-        setPublishModal(false);
-        setPublished(true);
-        try { localStorage.removeItem(storageKey); } catch { /* Process remains in memory. */ }
+    const [isPublishing, setIsPublishing] = useState(false);
+    const [publishError, setPublishError] = useState('');
+
+    async function doPublish(targetStatus = 'PUBLISHED') {
+        if (isPublishing) return;
+        setIsPublishing(true);
+        setPublishError('');
+        try {
+            const backendStatus = targetStatus === 'PUBLISHED' ? 'PUBLIE' : 'BROUILLON';
+            const payload = {
+                name: draft.name.trim(),
+                description: draft.description,
+                icon: draft.icon || '📋',
+                workspaceIds: draft.workspaceIds,
+                formMode: draft.formMode,
+                formRefId: draft.formRefId,
+                formFields: draft.formFields,
+                formId: savedFormId,
+                wfMode: draft.wfMode || 'new',
+                wfRefId: draft.wfRefId,
+                wfNodes: draft.wfNodes || [],
+                wfEdges: draft.wfEdges || [],
+                status: backendStatus,
+                draftId,
+            };
+
+            const created = await processApi.create(payload);
+
+            addProcess({
+                id: created.id.toString(),
+                ...structuredClone(draft),
+                workspaces: structuredClone(workspaces.filter(w => draft.workspaceIds.includes(w.id))),
+                name: created.name || draft.name.trim(),
+                description: created.description,
+                formId: created.formId ? created.formId.toString() : savedFormId,
+                workflowId: created.workflowId ? created.workflowId.toString() : 'wf-' + uid(),
+                status: targetStatus,
+                icon: created.icon || draft.icon || '📋',
+                createdAt: created.dateCreation ? created.dateCreation.slice(0, 10) : new Date().toISOString().split('T')[0],
+            });
+
+            setPublishModal(false);
+            setPublished(true);
+            showToast(targetStatus === 'PUBLISHED' ? 'Processus publié avec succès !' : 'Processus enregistré en brouillon');
+            try { localStorage.removeItem(storageKey); } catch { /* Saved in backend */ }
+        } catch (error) {
+            setPublishError(error.message || 'Erreur lors de la publication du processus.');
+        } finally {
+            setIsPublishing(false);
+        }
     }
     const checks = computeChecks(draft);
-    const allChecksOk = checks.every(c => c.ok);
+    const allChecksOk = checks.every(c => c.ok) && (!backendValidation.checked || backendValidation.valid);
     const selectedField = draft.formFields.find(f => f.id === selectedFieldId) ?? null;
     const managedWs = workspaces.find(w => w.id === manageMembersWsId);
     // ── PROGRESS BAR ──────────────────────────────────────────────────────────
@@ -1238,18 +1380,15 @@ export default function ProcessCreator() {
         </div>
 
         {draft.wfMode === 'reuse' ? (<div className="mb-4">
-            {/* import from WORKFLOWS const (imported from mockData) */}
-            <select className="w-full max-w-sm px-3 py-2 text-sm border border-[#D1D9E0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1F4E79]/30 bg-white" onChange={e => {
-                    const wf = WORKFLOWS.find(w => w.id === e.target.value);
-                    if (wf) {
-                        const nodes = wf.nodes.map(n => ({ id: n.id, type: n.type, label: n.label, x: n.x, y: n.y, workspaceId: n.workspaceId, slaHours: n.slaHours, conditionField: n.conditionField, conditionOperator: n.conditionOperator, conditionValue: n.conditionValue }));
-                        const edges = wf.edges.map(edge => ({ id: edge.id, from: edge.from, to: edge.to, label: edge.label }));
-                        setDraft(d => ({ ...d, wfRefId: wf.id, wfNodes: nodes, wfEdges: edges }));
-                    }
-                }}>
+            <select className="w-full max-w-sm px-3 py-2 text-sm border border-[#D1D9E0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1F4E79]/30 bg-white" value={draft.wfRefId || ''} onChange={e => handleSelectWorkflow(e.target.value)}>
               <option value="">Sélectionner un workflow…</option>
-              {WORKFLOWS.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+              {workflowsCatalog.length > 0 ? (
+                workflowsCatalog.map(w => <option key={w.id} value={w.id}>{w.name} ({w.nodeCount || w.nodes?.length || 0} étapes)</option>)
+              ) : (
+                WORKFLOWS.map(w => <option key={w.id} value={w.id}>{w.name} ({w.nodes?.length || 0} étapes)</option>)
+              )}
             </select>
+            {workflowCatalogError && <p className="text-xs text-red-600 mt-1">{workflowCatalogError}</p>}
           </div>) : null}
 
         <div className="flex-1 border border-[#D1D9E0] rounded-xl overflow-hidden bg-white" style={{ minHeight: 520 }}>
@@ -1259,18 +1398,38 @@ export default function ProcessCreator() {
     }
     // ── STEP 5: VÉRIFICATION ──────────────────────────────────────────────────
     function renderStep5() {
+        const errorCount = checks.filter(c => !c.ok).length + (backendValidation.errors?.length || 0);
         return (<div className="max-w-2xl mx-auto space-y-6">
         <div>
           <h2 className="text-lg font-bold text-[#172033] mb-1">Vérification</h2>
-          <p className="text-sm text-[#8898AA]">Tous les points doivent être validés avant de pouvoir publier.</p>
+          <p className="text-sm text-[#8898AA]">Tous les points locaux et serveur doivent être validés avant de pouvoir publier.</p>
         </div>
-        <div className={`rounded-xl border px-5 py-4 flex items-center gap-3 ${allChecksOk ? 'bg-[#DCFCE7] border-[#16A34A]/40' : 'bg-[#FFEDD5] border-[#EA580C]/40'}`}>
-          {allChecksOk ? <CheckCircle size={20} className="text-[#16A34A] flex-shrink-0"/> : <AlertTriangle size={20} className="text-[#EA580C] flex-shrink-0"/>}
-          <div>
-            <p className={`text-sm font-semibold ${allChecksOk ? 'text-[#14532D]' : 'text-[#7C2D12]'}`}>{allChecksOk ? 'Le processus est prêt à être publié !' : `${checks.filter(c => !c.ok).length} point(s) à corriger`}</p>
-            <p className={`text-xs mt-0.5 ${allChecksOk ? 'text-[#166534]' : 'text-[#9A3412]'}`}>{allChecksOk ? 'Toutes les vérifications sont passées.' : 'Cliquez sur un point pour y accéder et le corriger.'}</p>
+        <div className={`rounded-xl border px-5 py-4 flex items-center justify-between gap-3 ${allChecksOk ? 'bg-[#DCFCE7] border-[#16A34A]/40' : 'bg-[#FFEDD5] border-[#EA580C]/40'}`}>
+          <div className="flex items-center gap-3">
+            {allChecksOk ? <CheckCircle size={20} className="text-[#16A34A] flex-shrink-0"/> : <AlertTriangle size={20} className="text-[#EA580C] flex-shrink-0"/>}
+            <div>
+              <p className={`text-sm font-semibold ${allChecksOk ? 'text-[#14532D]' : 'text-[#7C2D12]'}`}>{allChecksOk ? 'Le processus est prêt à être publié !' : `${errorCount} point(s) à corriger`}</p>
+              <p className={`text-xs mt-0.5 ${allChecksOk ? 'text-[#166534]' : 'text-[#9A3412]'}`}>
+                {validatingBackend ? 'Validation auprès du backend en cours...' : allChecksOk ? 'Toutes les vérifications frontend et serveur sont passées avec succès.' : 'Cliquez sur un point pour y accéder et le corriger.'}
+              </p>
+            </div>
           </div>
+          {backendValidation.checked && (
+            <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${backendValidation.valid ? 'bg-white text-[#16A34A] border-[#16A34A]/30' : 'bg-white text-[#DC2626] border-[#DC2626]/30'}`}>
+              {backendValidation.valid ? 'Serveur OK' : 'Serveur Erreur'}
+            </span>
+          )}
         </div>
+
+        {backendValidation.errors?.length > 0 && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-1.5">
+            <p className="text-xs font-semibold text-red-800">Erreurs détectées par le moteur de workflow backend :</p>
+            {backendValidation.errors.map((err, i) => (
+              <p key={i} className="text-xs text-red-700 flex items-center gap-2"><X size={12} className="flex-shrink-0"/> {err}</p>
+            ))}
+          </div>
+        )}
+
         <div className="space-y-2">
           {checks.map(c => (<div key={c.id} onClick={() => { if (!c.ok && c.goTo)
                 goTo(c.goTo); }} className={`flex items-start gap-3 px-4 py-3.5 rounded-xl border transition-colors ${c.ok ? 'bg-white border-[#D1D9E0]' : 'bg-white border-[#DC2626]/30 cursor-pointer hover:bg-[#FEF2F2]'}`}>
@@ -1282,8 +1441,8 @@ export default function ProcessCreator() {
                 {c.error && <p className="text-xs text-[#DC2626] mt-0.5">{c.error}</p>}
               </div>
               {!c.ok && c.goTo && (<span className="text-[10px] text-[#1F4E79] font-medium flex items-center gap-1 flex-shrink-0">
-                  Étape {c.goTo} <ChevronRight size={11}/>
-                </span>)}
+                Étape {c.goTo} <ChevronRight size={11}/>
+              </span>)}
             </div>))}
         </div>
       </div>);
@@ -1385,16 +1544,26 @@ export default function ProcessCreator() {
           </div>
         </div>
 
+        {publishError && (
+          <div className="bg-[#FEF2F2] border border-[#DC2626]/30 rounded-xl p-4 flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle size={15} className="text-[#DC2626] mt-0.5 flex-shrink-0"/>
+              <p className="text-xs text-[#7F1D1D] font-medium">{publishError}</p>
+            </div>
+            <button onClick={() => setPublishError('')} className="text-[#8898AA] hover:text-[#172033]"><X size={13}/></button>
+          </div>
+        )}
+
         {!allChecksOk && (<div className="bg-[#FEF2F2] border border-[#DC2626]/30 rounded-xl p-4 flex items-start gap-3">
             <AlertTriangle size={14} className="text-[#DC2626] mt-0.5 flex-shrink-0"/>
             <p className="text-xs text-[#7F1D1D]">Des erreurs ont été détectées lors de la vérification. Retournez à l'étape 5 pour les corriger avant de publier.</p>
           </div>)}
 
         <div className="flex gap-3">
-          <button onClick={() => doPublish('DRAFT')} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border border-[#D1D9E0] text-sm font-medium text-[#4A5568] rounded-xl hover:bg-[#F4F6F8] transition-colors">
-            <Save size={14}/> Enregistrer en brouillon
+          <button onClick={() => doPublish('DRAFT')} disabled={isPublishing} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border border-[#D1D9E0] text-sm font-medium text-[#4A5568] rounded-xl hover:bg-[#F4F6F8] disabled:opacity-40 transition-colors">
+            <Save size={14}/> {isPublishing ? 'Enregistrement...' : 'Enregistrer en brouillon'}
           </button>
-          <button onClick={() => setPublishModal(true)} disabled={!allChecksOk} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-[#1F4E79] text-white text-sm font-medium rounded-xl hover:bg-[#172033] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+          <button onClick={() => setPublishModal(true)} disabled={!allChecksOk || isPublishing} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-[#1F4E79] text-white text-sm font-medium rounded-xl hover:bg-[#172033] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
             <CheckCircle size={14}/> Publier le processus
           </button>
         </div>
@@ -1506,11 +1675,14 @@ export default function ProcessCreator() {
             <div className="text-center mb-5">
               <div className="w-12 h-12 bg-[#DCFCE7] rounded-full flex items-center justify-center mx-auto mb-3"><CheckCircle size={24} className="text-[#16A34A]"/></div>
               <h3 className="text-sm font-semibold text-[#172033]">Publier "{draft.name}" ?</h3>
-              <p className="text-xs text-[#8898AA] mt-1">Le processus sera immédiatement disponible pour les employés dans le catalogue.</p>
+              <p className="text-xs text-[#8898AA] mt-1">Le formulaire, le workflow et les espaces associés seront enregistrés en base de données et immédiatement disponibles dans le catalogue.</p>
+              {publishError && <p className="text-xs text-red-600 mt-2 font-medium">{publishError}</p>}
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setPublishModal(false)} className="flex-1 px-4 py-2 text-sm text-[#4A5568] border border-[#D1D9E0] rounded-lg hover:bg-[#F4F6F8]">Annuler</button>
-              <button onClick={() => doPublish('PUBLISHED')} className="flex-1 px-4 py-2 bg-[#16A34A] text-white text-sm font-medium rounded-lg hover:bg-[#15803D]">Publier</button>
+              <button onClick={() => { setPublishModal(false); setPublishError(''); }} disabled={isPublishing} className="flex-1 px-4 py-2 text-sm text-[#4A5568] border border-[#D1D9E0] rounded-lg hover:bg-[#F4F6F8] disabled:opacity-40">Annuler</button>
+              <button onClick={() => doPublish('PUBLISHED')} disabled={isPublishing} className="flex-1 px-4 py-2 bg-[#16A34A] text-white text-sm font-medium rounded-lg hover:bg-[#15803D] disabled:opacity-40 flex items-center justify-center gap-1.5">
+                {isPublishing ? 'Publication...' : 'Publier'}
+              </button>
             </div>
           </div>
         </div>)}

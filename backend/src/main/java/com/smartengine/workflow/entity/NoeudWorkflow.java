@@ -60,4 +60,25 @@ public class NoeudWorkflow {
 
     @Column(name = "position_y", precision = 10, scale = 2)
     private BigDecimal positionY = BigDecimal.ZERO;
+
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public Workflow getWorkflow() { return workflow; }
+    public void setWorkflow(Workflow workflow) { this.workflow = workflow; }
+    public String getCleNoeud() { return cleNoeud; }
+    public void setCleNoeud(String cleNoeud) { this.cleNoeud = cleNoeud; }
+    public String getLibelle() { return libelle; }
+    public void setLibelle(String libelle) { this.libelle = libelle; }
+    public TypeNoeud getTypeNoeud() { return typeNoeud; }
+    public void setTypeNoeud(TypeNoeud typeNoeud) { this.typeNoeud = typeNoeud; }
+    public Espace getEspace() { return espace; }
+    public void setEspace(Espace espace) { this.espace = espace; }
+    public Integer getSlaHeures() { return slaHeures; }
+    public void setSlaHeures(Integer slaHeures) { this.slaHeures = slaHeures; }
+    public String getConfigurationJson() { return configurationJson; }
+    public void setConfigurationJson(String configurationJson) { this.configurationJson = configurationJson; }
+    public BigDecimal getPositionX() { return positionX; }
+    public void setPositionX(BigDecimal positionX) { this.positionX = positionX; }
+    public BigDecimal getPositionY() { return positionY; }
+    public void setPositionY(BigDecimal positionY) { this.positionY = positionY; }
 }

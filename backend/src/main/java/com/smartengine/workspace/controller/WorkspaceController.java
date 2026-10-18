@@ -38,7 +38,7 @@ public class WorkspaceController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<WorkspaceResponse> getById(@PathVariable String id) {
+    public ResponseEntity<WorkspaceResponse> getById(@PathVariable("id") String id) {
         return ResponseEntity.ok(workspaceService.getById(id));
     }
 
@@ -49,7 +49,7 @@ public class WorkspaceController {
 
     @PutMapping("/{id}")
     public ResponseEntity<WorkspaceResponse> update(
-        @PathVariable String id,
+        @PathVariable("id") String id,
         @Valid @RequestBody WorkspaceRequest request
     ) {
         return ResponseEntity.ok(workspaceService.update(id, request));
@@ -57,7 +57,7 @@ public class WorkspaceController {
 
     @PatchMapping("/{id}/status")
     public ResponseEntity<WorkspaceResponse> updateStatus(
-        @PathVariable String id,
+        @PathVariable("id") String id,
         @Valid @RequestBody WorkspaceStatusRequest request
     ) {
         return ResponseEntity.ok(workspaceService.updateStatus(id, request));
@@ -65,7 +65,7 @@ public class WorkspaceController {
 
     @PostMapping("/{id}/members")
     public ResponseEntity<WorkspaceResponse> addMember(
-        @PathVariable String id,
+        @PathVariable("id") String id,
         @Valid @RequestBody WorkspaceMemberRequest request
     ) {
         return ResponseEntity.ok(workspaceService.addMember(id, request));
@@ -73,8 +73,8 @@ public class WorkspaceController {
 
     @DeleteMapping("/{id}/members/{userId}")
     public ResponseEntity<WorkspaceResponse> removeMember(
-        @PathVariable String id,
-        @PathVariable Long userId
+        @PathVariable("id") String id,
+        @PathVariable("userId") Long userId
     ) {
         return ResponseEntity.ok(workspaceService.removeMember(id, userId));
     }
