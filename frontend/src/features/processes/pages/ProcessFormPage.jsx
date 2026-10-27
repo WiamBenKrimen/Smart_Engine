@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Trash2, Check, X, ChevronRight, ArrowLeft, Eye, FileText, Building2, Users, Save, AlertTriangle, Info, CheckCircle, ZoomIn, ZoomOut, Undo2, Redo2, Copy, GripVertical, Type, Hash, DollarSign, Calendar, List, Paperclip, CheckSquare, AlignLeft, ChevronDown, Settings, GitBranch } from 'lucide-react';
 import { USERS, WORKFLOWS } from '../../../app/mockData';
 import { useProcesses } from '../../../app/providers/ProcessProvider';
@@ -777,13 +777,16 @@ const STEP_META = [
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function ProcessCreator() {
     const navigate = useNavigate();
-    const { addProcess } = useProcesses();
-    const [step, setStep] = useState(1);
+    const [searchParams] = useSearchParams();
+    const stepParam = searchParams.get('step');
+    const workflowIdParam = searchParams.get('workflowId');
+    const initialStep = stepParam ? Math.min(Math.max(parseInt(stepParam, 10), 1), 6) : 1;
+    const [step, setStep] = useState(initialStep);
     const creatorRef = useRef(null);
     useEffect(() => {
         creatorRef.current?.querySelector('[data-process-content]')?.scrollTo({ top: 0, behavior: 'instant' });
     }, [step]);
-    const [maxStep, setMaxStep] = useState(1);
+    const [maxStep, setMaxStep] = useState(stepParam ? 6 : 1);
     const { currentUser } = useAuth();
     const storageKey = 'smart-engine-process-draft:' + currentUser.id;
     const [initial] = useState(() => {
@@ -828,16 +831,82 @@ export default function ProcessCreator() {
                 setSelectedFieldId(saved.formFields?.[0]?.id || null);
                 setDraftId(saved.id);
                 setSavedFormId(saved.formId || null);
-                setMaxStep(saved.savedStep >= 1 ? Math.min(saved.savedStep + 1, 6) : 1);
+                if (stepParam) {
+                    setMaxStep(6);
+                    setStep(initialStep);
+                } else {
+                    setMaxStep(saved.savedStep >= 1 ? Math.min(saved.savedStep + 1, 6) : 1);
+                }
+            } else if (stepParam) {
+                setMaxStep(6);
+                setStep(initialStep);
             }
             setDraftReady(true);
         }).catch(error => { if (!cancelled) setDraftLoadError(error.message); });
+
+        // If a specific workflowId was requested in URL params, load its nodes and edges
+        if (workflowIdParam) {
+            workflowApi.getById(workflowIdParam).then(fullWf => {
+                if (cancelled || !fullWf) return;
+                setDraft(d => {
+                    const loadedNodes = Array.isArray(fullWf.nodes) && fullWf.nodes.length > 0 ? fullWf.nodes.map(n => ({
+                        id: n.id,
+                        type: n.type,
+                        label: n.label,
+                        x: Number(n.x) || 100,
+                        y: Number(n.y) || 100,
+                        workspaceId: n.workspaceId,
+                        slaHours: n.slaHours,
+                        conditionField: n.conditionField,
+                        conditionOperator: n.conditionOperator,
+                        conditionValue: n.conditionValue,
+                        endResult: n.endResult,
+                        assignedUserId: n.assignedUserId,
+                    })) : d.wfNodes;
+
+                    const loadedEdges = Array.isArray(fullWf.edges) ? fullWf.edges.map(e => ({
+                        id: e.id,
+                        from: e.from,
+                        to: e.to,
+                        label: e.label,
+                    })) : d.wfEdges;
+
+                    const nodeWsIds = loadedNodes.filter(n => n.workspaceId).map(n => n.workspaceId);
+                    const mergedWs = Array.from(new Set([...(d.workspaceIds || []), ...nodeWsIds]));
+
+                    return {
+                        ...d,
+                        name: d.name || fullWf.name || 'Processus - ' + fullWf.name,
+                        description: d.description || fullWf.description || '',
+                        wfMode: 'reuse',
+                        wfRefId: String(fullWf.id),
+                        wfNodes: loadedNodes,
+                        wfEdges: loadedEdges,
+                        workspaceIds: mergedWs.length > 0 ? mergedWs : d.workspaceIds,
+                    };
+                });
+            }).catch(err => {
+                console.warn('Could not load requested workflow:', err);
+                const localWf = WORKFLOWS.find(w => String(w.id) === String(workflowIdParam));
+                if (localWf) {
+                    setDraft(d => ({
+                        ...d,
+                        name: d.name || localWf.name,
+                        wfMode: 'reuse',
+                        wfRefId: String(localWf.id),
+                        wfNodes: localWf.nodes || [],
+                        wfEdges: localWf.edges || [],
+                    }));
+                }
+            });
+        }
+
         formApi.list().then(rows => { if (!cancelled) { setForms(rows || []); setFormCatalogError(''); } })
             .catch(error => { if (!cancelled) setFormCatalogError(error.message); });
         workflowApi.list().then(rows => { if (!cancelled) { setWorkflowsCatalog(rows || []); setWorkflowCatalogError(''); } })
             .catch(error => { if (!cancelled) setWorkflowCatalogError(error.message); });
         return () => { cancelled = true; };
-    }, [draftReload]);
+    }, [draftReload, workflowIdParam, stepParam, initialStep]);
 
     // Validation via backend on step 5
     useEffect(() => {
@@ -945,6 +1014,10 @@ export default function ProcessCreator() {
     }
     function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 2500); }
     function goTo(s) {
+        if (s < step) {
+            setStep(s);
+            return;
+        }
         if (s > 1 && !draft.name.trim()) return;
         if (s > 2 && (loadingWorkspaces || workspaceError || !workspaces.some(w => w.active && draft.workspaceIds.includes(w.id)))) return;
         if (s > 3 && formErrors().length) return;
