@@ -26,7 +26,7 @@ class ProcessDraftServiceTest {
         service = new ProcessDraftService(drafts, forms, fields, workspaces, new ObjectMapper());
     }
     ProcessDraftRequest request(int step, List<String> ws, List<ProcessDraftRequest.Field> list) {
-        return new ProcessDraftRequest("Teletravail", "Description", "icon", ws, "new", null, list, step);
+        return new ProcessDraftRequest("Teletravail", "Description", "icon", ws, "new", null, list, step, null, null, null, null);
     }
     ProcessDraftRequest.Field field(String key) {
         return new ProcessDraftRequest.Field("ui-id", TypeChamp.TEXT, key, "Objet", true, "Exemple", "Aide", List.of(), 0);
@@ -66,7 +66,7 @@ class ProcessDraftServiceTest {
         var template = new Formulaire(); template.setId(20L); template.setActif(true);
         when(forms.findById(20L)).thenReturn(Optional.of(template));
         when(drafts.save(any())).thenAnswer(call -> { ProcessDraft d = call.getArgument(0); d.setId(8L); return d; });
-        service.save(null, "admin@test", new ProcessDraftRequest("Teletravail", "", "icon", List.of(), "reuse", "20", List.of(field("objet")), 1));
+        service.save(null, "admin@test", new ProcessDraftRequest("Teletravail", "", "icon", List.of(), "reuse", "20", List.of(field("objet")), 1, null, null, null, null));
         verifyNoInteractions(fields); verify(forms, never()).save(any());
     }
     @Test void noDraftReturnsNoSnapshot() {
