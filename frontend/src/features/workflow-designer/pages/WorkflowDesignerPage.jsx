@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Save, CheckCircle, ZoomIn, ZoomOut, Trash2, ArrowLeft, X, Check, ChevronRight, GitBranch, FileText, Info, AlertTriangle, Undo2, Redo2 } from 'lucide-react';
 import { WORKSPACES, FORMS, USERS } from '../../../app/mockData';
 import { useProcesses } from '../../../app/providers/ProcessProvider';
+import { workflowApi } from '../../../api/workflowApi';
 /* ─── CONSTANTS ───────────────────────────────────────────────────────────── */
 const NW = 160, NH = 60, CDW = 164, CDH = 104;
 const NODE_C = {
@@ -855,10 +857,45 @@ function ConnectionsView({ wf, onUpdate, onGoToCanvas }) {
 }
 /* ─── MAIN COMPONENT ──────────────────────────────────────────────────────── */
 export default function WorkflowDesigner() {
+    const navigate = useNavigate();
     const { addProcess } = useProcesses();
     const [mainView, setMainView] = useState('list');
     const [wizardStep, setWizardStep] = useState(1);
     const [workflows, setWorkflows] = useState(INITIAL_WORKFLOWS);
+
+    useEffect(() => {
+        workflowApi.list().then(rows => {
+            if (Array.isArray(rows) && rows.length > 0) {
+                setWorkflows(rows.map(r => ({
+                    id: String(r.id),
+                    name: r.name,
+                    description: r.description || '',
+                    status: r.status === 'PUBLIE' ? 'PUBLISHED' : r.status === 'ARCHIVE' ? 'ARCHIVED' : 'DRAFT',
+                    updatedAt: r.dateCreation || new Date().toISOString(),
+                    nodes: (r.nodes || []).map(n => ({
+                        id: n.id,
+                        type: n.type,
+                        label: n.label,
+                        x: Number(n.x) || 100,
+                        y: Number(n.y) || 100,
+                        workspaceId: n.workspaceId,
+                        slaHours: n.slaHours,
+                        conditionField: n.conditionField,
+                        conditionOperator: n.conditionOperator,
+                        conditionValue: n.conditionValue,
+                        endResult: n.endResult,
+                        assignedUserId: n.assignedUserId,
+                    })),
+                    edges: (r.edges || []).map(e => ({
+                        id: e.id,
+                        from: e.from,
+                        to: e.to,
+                        label: e.label,
+                    })),
+                })));
+            }
+        }).catch(err => console.warn('Could not load workflows:', err));
+    }, []);
     const [activeWf, setActiveWf] = useState(null);
     const [savedWs, setSavedWs] = useState([...WORKSPACES]);
     const [selectedNodeId, setSelectedNodeId] = useState(null);
@@ -998,17 +1035,15 @@ export default function WorkflowDesigner() {
         const SL = { DRAFT: 'Brouillon', PUBLISHED: 'Publié', ARCHIVED: 'Archivé' };
         return (<div className="space-y-5">
         <div className="flex items-center justify-between">
-          <div><h1 className="text-xl font-bold text-[#172033]">Workflows</h1><p className="text-sm text-[#8898AA] mt-0.5">Concevez vos flux d'approbation guidés</p></div>
-          <button onClick={() => openWizard(null)} className="flex items-center gap-2 bg-[#1F4E79] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#172033]">
-            <Plus className="w-4 h-4"/> Nouveau Workflow
-          </button>
+          <div><h1 className="text-xl font-bold text-[#172033]">Workflows</h1><p className="text-sm text-[#8898AA] mt-0.5">Concevez et gérez vos flux d'approbation</p></div>
         </div>
         <div className="bg-white border border-[#D1D9E0] rounded-xl overflow-hidden">
           {workflows.length === 0 ? (<div className="py-20 text-center">
               <GitBranch className="w-10 h-10 text-[#D1D9E0] mx-auto mb-3"/>
               <p className="font-semibold text-[#172033]">Aucun workflow</p>
-              <button onClick={() => openWizard(null)} className="mt-4 inline-flex items-center gap-2 bg-[#1F4E79] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#172033]">
-                <Plus className="w-4 h-4"/> Créer un Workflow
+              <p className="text-xs text-[#8898AA] mt-1 max-w-sm mx-auto">Les workflows se conçoivent et s'associent directement lors de la création d'un processus.</p>
+              <button onClick={() => navigate('/admin/process-creator?step=4')} className="mt-4 inline-flex items-center gap-2 bg-[#1F4E79] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#172033]">
+                Créer via un Processus
               </button>
             </div>) : (<table className="w-full text-sm">
               <thead><tr className="border-b border-[#D1D9E0] text-xs text-[#8898AA] uppercase tracking-wide bg-[#F8FAFC]">
@@ -1025,13 +1060,9 @@ export default function WorkflowDesigner() {
                     <td className="px-5 py-3 text-[#4A5568]">{wf.nodes.length}</td>
                     <td className="px-5 py-3 text-xs text-[#8898AA]">{new Date(wf.updatedAt).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
                     <td className="px-5 py-3">
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => openWizard(wf, wf.status === 'PUBLISHED' ? 5 : 2)} className="px-3 py-1.5 text-xs font-medium text-[#1F4E79] bg-[#EBF2F9] hover:bg-[#1F4E79] hover:text-white rounded-lg transition-colors">
-                          {wf.status === 'PUBLISHED' ? 'Consulter' : 'Éditer'}
-                        </button>
-                        <button onClick={() => { const id = `wf_${Date.now()}`; setWorkflows(prev => [...prev, { ...wf, id, name: `${wf.name} (copie)`, status: 'DRAFT', updatedAt: new Date().toISOString() }]); showToast('Dupliqué'); }} className="px-3 py-1.5 text-xs font-medium text-[#4A5568] border border-[#D1D9E0] hover:bg-[#F4F6F8] rounded-lg">Dupliquer</button>
-                        {wf.status !== 'ARCHIVED' && <button onClick={() => { setWorkflows(prev => prev.map(w => w.id === wf.id ? { ...w, status: 'ARCHIVED' } : w)); showToast('Archivé'); }} className="px-3 py-1.5 text-xs font-medium text-[#8898AA] border border-[#D1D9E0] hover:bg-[#F4F6F8] rounded-lg">Archiver</button>}
-                      </div>
+                      <button onClick={() => navigate(`/admin/process-creator?step=4&workflowId=${wf.id}`)} className="px-3 py-1.5 text-xs font-medium text-[#1F4E79] bg-[#EBF2F9] hover:bg-[#1F4E79] hover:text-white rounded-lg transition-colors">
+                        Modifier
+                      </button>
                     </td>
                   </tr>))}
               </tbody>
