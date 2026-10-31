@@ -78,4 +78,12 @@ public class WorkspaceController {
     ) {
         return ResponseEntity.ok(workspaceService.removeMember(id, userId));
     }
+
+    private final com.smartengine.task.service.TaskService taskService;
+
+    @GetMapping("/{id}/tasks")
+    public ResponseEntity<List<com.smartengine.task.dto.TaskResponse>> getTasksByWorkspace(@PathVariable("id") String id) {
+        Long wsId = Long.valueOf(id.replace("ws", ""));
+        return ResponseEntity.ok(taskService.getTasksByWorkspace(wsId));
+    }
 }

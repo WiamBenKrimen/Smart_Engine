@@ -22,6 +22,7 @@ import AuditLogPage from '../features/audit/pages/AuditLogPage';
 import RequestCreatePage from '../features/requests/pages/RequestCreatePage';
 import RequestListPage from '../features/requests/pages/RequestListPage';
 import RequestDetailsPage from '../features/requests/pages/RequestDetailsPage';
+import TaskListPage from '../features/tasks/pages/TaskListPage';
 
 export default function AppRoutes() {
   return (
@@ -40,6 +41,7 @@ export default function AppRoutes() {
           <Route path="new-request" element={<RequestCreatePage />} />
           <Route path="requests" element={<RequestListPage />} />
           <Route path="requests/:id" element={<RequestDetailsPage />} />
+          <Route path="tasks" element={<TaskListPage />} />
           <Route path="profile" element={<ProfilePage />} />
         </Route>
       </Route>

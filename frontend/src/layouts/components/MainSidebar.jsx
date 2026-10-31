@@ -2,9 +2,11 @@ import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, FilePlus, Inbox, Building2, LogOut, UserCircle } from 'lucide-react';
 import { useAuth } from '../../app/providers/AuthProvider';
 import SmartEngineLogo from '../../components/SmartEngineLogo';
+
 export default function EmployeeSidebar() {
     const { currentUser, logout, getUserWorkspaces, setActiveWorkspace } = useAuth();
     const workspaces = getUserWorkspaces();
+
     return (<aside className="sidebar-grid sticky top-0 flex h-screen w-64 flex-shrink-0 flex-col border-r border-white/5">
       <div className="px-5 py-5">
         <div className="flex items-center gap-2.5">
@@ -17,7 +19,8 @@ export default function EmployeeSidebar() {
       </div>
 
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
-        <p className="mb-3 px-3 text-[9px] font-semibold uppercase tracking-[0.2em] text-white/30">Mon espace</p>
+        {/* Section: Mes Demandes */}
+        <p className="mb-2 px-3 text-[9px] font-semibold uppercase tracking-[0.2em] text-white/40">Mes demandes</p>
         {[
             { to: '/employee', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
             { to: '/employee/new-request', label: 'Nouvelle demande', icon: FilePlus },
@@ -27,8 +30,9 @@ export default function EmployeeSidebar() {
             {label}
           </NavLink>))}
 
+        {/* Workspaces */}
         {workspaces.length > 0 && (<>
-            <p className="mb-3 mt-6 px-3 text-[9px] font-semibold uppercase tracking-[0.2em] text-white/30">Workspaces</p>
+            <p className="mb-2 mt-6 px-3 text-[9px] font-semibold uppercase tracking-[0.2em] text-white/40">Workspaces</p>
             {workspaces.map(ws => (<NavLink key={ws.id} to={`/workspaces/${ws.id}`} className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium mb-0.5 transition-colors ${isActive ? 'bg-white/[0.12] text-white ring-1 ring-white/10' : 'text-white/55 hover:bg-white/[0.06] hover:text-white'}`} onClick={() => setActiveWorkspace(ws)}>
                 <Building2 className="w-4 h-4 flex-shrink-0"/>
                 {ws.name}

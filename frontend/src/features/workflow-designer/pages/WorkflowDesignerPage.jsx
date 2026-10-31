@@ -93,7 +93,7 @@ function nodeStatus(n, edges) {
     if (n.type === 'END')
         return 'complete';
     if (n.type === 'APPROVAL') {
-        if (!n.workspaceId)
+        if (!n.workspaceId || !n.assignedUserId)
             return 'incomplete';
         return edges.some(e => e.from === n.id && e.label === 'APPROVED') && edges.some(e => e.from === n.id && e.label === 'REJECTED') ? 'complete' : 'unconnected';
     }
@@ -299,22 +299,32 @@ function PropsPanel({ node, wf, workspaces, readonly, onUpdate, onDelete, onCrea
       {node.type === 'APPROVAL' && (<>
         <div>
           <label className="text-xs font-semibold text-[#4A5568] uppercase tracking-wide block mb-1">Workspace responsable <span className="text-[#DC2626]">*</span></label>
-          <select value={node.workspaceId ?? ''} onChange={e => onUpdate({ workspaceId: e.target.value || undefined })} disabled={readonly} className={`w-full px-3 py-2 border rounded-lg text-sm disabled:bg-[#F8FAFC] focus:outline-none focus:border-[#1F4E79] ${!node.workspaceId ? 'border-[#EA580C] bg-[#FFFBEB]' : 'border-[#D1D9E0]'}`}>
-            <option value="">— Sélectionner —</option>
+          <select value={node.workspaceId ?? ''} onChange={e => onUpdate({ workspaceId: e.target.value || undefined, assignedUserId: undefined })} disabled={readonly} className={`w-full px-3 py-2 border rounded-lg text-sm disabled:bg-[#F8FAFC] focus:outline-none focus:border-[#1F4E79] ${!node.workspaceId ? 'border-[#EA580C] bg-[#FFFBEB]' : 'border-[#D1D9E0]'}`}>
+            <option value="">— Sélectionner un workspace —</option>
             {workspaces.filter(ws => ws.active).map(ws => <option key={ws.id} value={ws.id}>{ws.name}</option>)}
           </select>
           {!node.workspaceId && !readonly && (<button onClick={onCreateWs} className="mt-1 text-xs text-[#1F4E79] hover:underline flex items-center gap-1">
               <Plus className="w-3 h-3"/> Créer un espace
             </button>)}
         </div>
-        {node.workspaceId && (<div>
-            <label className="text-xs font-semibold text-[#4A5568] uppercase tracking-wide block mb-1">Assigné à (optionnel)</label>
-            <select value={node.assignedUserId ?? ''} onChange={e => onUpdate({ assignedUserId: e.target.value || undefined })} disabled={readonly} className="w-full px-3 py-2 border border-[#D1D9E0] rounded-lg text-sm disabled:bg-[#F8FAFC] focus:outline-none focus:border-[#1F4E79]">
-              <option value="">Tous les membres</option>
-              {USERS.filter(u => WORKSPACES.find(w => w.id === node.workspaceId)?.memberIds.includes(u.id)).map(u => (<option key={u.id} value={u.id}>{u.name}</option>))}
-            </select>
-            <p className="text-[10px] text-[#8898AA] mt-1">Si vide, tous les membres du workspace peuvent traiter cette étape.</p>
-          </div>)}
+        <div>
+          <label className="text-xs font-semibold text-[#4A5568] uppercase tracking-wide block mb-1">Responsable assigné <span className="text-[#DC2626]">*</span></label>
+          <select value={node.assignedUserId ?? ''} onChange={e => onUpdate({ assignedUserId: e.target.value || undefined })} disabled={readonly || !node.workspaceId} className={`w-full px-3 py-2 border rounded-lg text-sm disabled:bg-[#F8FAFC] focus:outline-none focus:border-[#1F4E79] ${!node.workspaceId ? 'bg-[#F8FAFC]' : !node.assignedUserId ? 'border-[#EA580C] bg-[#FFFBEB]' : 'border-[#D1D9E0]'}`}>
+            <option value="">{node.workspaceId ? '— Sélectionner un responsable —' : '— Sélectionner d\'abord un workspace —'}</option>
+            {(() => {
+              const ws = workspaces.find(w => w.id === node.workspaceId) || WORKSPACES.find(w => w.id === node.workspaceId);
+              const memberIds = ws?.memberIds || [];
+              const userPool = USERS;
+              const filtered = userPool.filter(u => memberIds.includes(u.id) || memberIds.includes(String(u.id)) || memberIds.includes(Number(u.id)));
+              return filtered.map(u => (
+                <option key={u.id} value={u.id}>{u.name || (u.prenom + ' ' + u.nom)} ({u.email})</option>
+              ));
+            })()}
+          </select>
+          <p className="text-[10px] text-[#8898AA] mt-1">
+            {node.workspaceId ? 'Obligatoire : seuls les membres de ce workspace sont affichés.' : 'Veuillez choisir un workspace pour voir ses employés.'}
+          </p>
+        </div>
         <div>
           <label className="text-xs font-semibold text-[#4A5568] uppercase tracking-wide block mb-1">SLA (optionnel)</label>
           <div className="flex gap-2">

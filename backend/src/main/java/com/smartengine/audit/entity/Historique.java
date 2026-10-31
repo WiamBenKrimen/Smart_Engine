@@ -30,7 +30,7 @@ public class Historique {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(optional = false)
+    @ManyToOne
     @JoinColumn(name = "demande_id")
     private Demande demande;
 

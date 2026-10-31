@@ -36,7 +36,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/test", "/api/db/status", "/api/auth/login", "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/processes/**", "/api/workflows/**", "/api/forms/**").authenticated()
-                        .requestMatchers("/api/process-drafts/**", "/api/processes/**", "/api/workflows/**").hasRole("ADMIN")
+                        .requestMatchers("/api/audit/**", "/api/process-drafts/**", "/api/processes/**", "/api/workflows/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

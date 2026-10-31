@@ -1,8 +1,12 @@
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { FileText, Clock, AlertTriangle, CheckCircle, Building2, Activity, Radio, ArrowUpRight } from 'lucide-react';
 import KPICard from '../components/StatCard';
 import StatusBadge from '../../../components/StatusBadge';
-import { REQUESTS, WORKSPACES, AUDIT_LOGS, TASKS } from '../../../app/mockData';
+import { REQUESTS, WORKSPACES, TASKS } from '../../../app/mockData';
+import { auditApi } from '../../../api/auditApi';
 function timeAgo(iso) {
+    if (!iso) return '—';
     const diff = Date.now() - new Date(iso).getTime();
     const m = Math.floor(diff / 60000);
     if (m < 60)
@@ -13,6 +17,13 @@ function timeAgo(iso) {
     return `il y a ${Math.floor(h / 24)}j`;
 }
 export default function AdminDashboard() {
+    const [auditLogs, setAuditLogs] = useState([]);
+    useEffect(() => {
+        auditApi.list()
+            .then(res => setAuditLogs(Array.isArray(res) ? res : []))
+            .catch(() => {});
+    }, []);
+
     const late = TASKS.filter(t => t.status === 'LATE').length;
     const pending = TASKS.filter(t => t.status === 'AVAILABLE').length;
     const done = REQUESTS.filter(r => r.status === 'TERMINE').length;
@@ -110,31 +121,35 @@ export default function AdminDashboard() {
 
       {/* Audit feed */}
       <div className="panel overflow-hidden rounded-2xl">
-        <div className="flex items-center justify-between border-b border-[#D1D9E0]/70 px-5 py-4">
+        <Link to="/admin/audit" className="flex items-center justify-between border-b border-[#D1D9E0]/70 px-5 py-4 hover:bg-[#F8FAFC] transition-colors">
           <div>
             <h2 className="text-sm font-semibold text-[#172033]">Journal d’activité</h2>
-            <p className="mt-0.5 text-xs text-[#8898AA]">Traçabilité des dernières actions</p>
+            <p className="mt-0.5 text-xs text-[#8898AA]">Traçabilité des dernières actions (Source DB)</p>
           </div>
           <ArrowUpRight className="h-4 w-4 text-[#8898AA]"/>
-        </div>
+        </Link>
         <div className="divide-y divide-[#F4F6F8]">
-          {AUDIT_LOGS.slice(0, 5).map(log => (<div key={log.id} className="flex items-start gap-3 px-5 py-3.5 transition-colors hover:bg-[#F8FAFC]/80">
+          {auditLogs.slice(0, 5).map(log => (<div key={log.id} className="flex items-start gap-3 px-5 py-3.5 transition-colors hover:bg-[#F8FAFC]/80">
               <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-[#EBF2F9]">
                 <span className="text-[10px] font-bold text-[#1F4E79]">
-                  {log.userName.split(' ').map(n => n[0]).join('')}
+                  {(log.userName || '?').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2)}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-[#172033]">
-                  <span className="font-medium">{log.userName}</span>{' '}
+                  <span className="font-medium">{log.userName || 'Système'}</span>{' '}
                   <span className="text-[#4A5568]">{log.details}</span>
                 </p>
                 <p className="text-xs text-[#8898AA] mt-0.5">{timeAgo(log.timestamp)}</p>
               </div>
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${log.action === 'APPROVE' ? 'bg-[#DCFCE7] text-[#16A34A]' :
-                log.action === 'REJECT' ? 'bg-[#FEE2E2] text-[#DC2626]' :
-                    'bg-[#EBF2F9] text-[#1F4E79]'}`}>{log.action}</span>
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                log.action === 'APPROVE' || log.action === 'APPROUVEE' ? 'bg-[#DCFCE7] text-[#16A34A]' :
+                log.action === 'REJECT' || log.action === 'REFUSEE' ? 'bg-[#FEE2E2] text-[#DC2626]' :
+                'bg-[#EBF2F9] text-[#1F4E79]'}`}>{log.action}</span>
             </div>))}
+          {auditLogs.length === 0 && (
+            <div className="py-8 text-center text-xs text-[#8898AA]">Aucune activité récente enregistrée.</div>
+          )}
         </div>
       </div>
     </div>);

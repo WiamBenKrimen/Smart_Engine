@@ -69,6 +69,9 @@ public class WorkflowValidator {
                 if (n.workspaceId() == null || n.workspaceId().isBlank()) {
                     errors.add("L'étape d'approbation '" + n.label() + "' doit avoir un Workspace responsable assigné.");
                 }
+                if (n.assignedUserId() == null || n.assignedUserId().isBlank()) {
+                    errors.add("L'étape d'approbation '" + n.label() + "' doit avoir un responsable assigné.");
+                }
                 boolean hasApproved = safeEdges.stream().anyMatch(e -> n.id().equals(e.from()) && "APPROVED".equalsIgnoreCase(e.label()));
                 boolean hasRejected = safeEdges.stream().anyMatch(e -> n.id().equals(e.from()) && "REJECTED".equalsIgnoreCase(e.label()));
                 if (!hasApproved) {

@@ -116,7 +116,7 @@ function nodeStatus(n, edges) {
     if (n.type === 'END')
         return incoming.length === 0 ? 'unconnected' : 'complete';
     if (n.type === 'APPROVAL') {
-        if (!n.workspaceId)
+        if (!n.workspaceId || !n.assignedUserId)
             return 'incomplete';
         const hasApproved = outgoing.some(e => e.label === 'APPROVED');
         const hasRejected = outgoing.some(e => e.label === 'REJECTED');
@@ -147,6 +147,8 @@ function computeChecks(draft) {
     checks.push({ id: 'isolated', label: 'Aucune étape isolée', ok: isolated.length === 0, error: isolated.length > 0 ? `${isolated.map(n => n.label).join(', ')} sans connexion` : undefined, goTo: 4 });
     const noWs = wfNodes.filter(n => n.type === 'APPROVAL' && !n.workspaceId);
     checks.push({ id: 'ws', label: 'Chaque approbation a un Workspace', ok: noWs.length === 0, error: noWs.length > 0 ? `${noWs.map(n => n.label).join(', ')} sans workspace` : undefined, goTo: 4 });
+    const noAssignee = wfNodes.filter(n => n.type === 'APPROVAL' && !n.assignedUserId);
+    checks.push({ id: 'assignee', label: 'Chaque approbation a un responsable assigné', ok: noAssignee.length === 0, error: noAssignee.length > 0 ? `${noAssignee.map(n => n.label).join(', ')} sans responsable assigné` : undefined, goTo: 4 });
     const missingApprBranches = wfNodes.filter(n => n.type === 'APPROVAL' && (!wfEdges.some(e => e.from === n.id && e.label === 'APPROVED') || !wfEdges.some(e => e.from === n.id && e.label === 'REJECTED')));
     checks.push({ id: 'appr-branches', label: 'Branches APPROUVÉ et REFUSÉ reliées', ok: missingApprBranches.length === 0, error: missingApprBranches.length > 0 ? `${missingApprBranches.map(n => n.label).join(', ')} incomplet` : undefined, goTo: 4 });
     const missingCondBranches = wfNodes.filter(n => n.type === 'CONDITION' && (!wfEdges.some(e => e.from === n.id && e.label === 'TRUE') || !wfEdges.some(e => e.from === n.id && e.label === 'FALSE')));
@@ -356,7 +358,7 @@ function WfNodeEl({ node, edges, selected, zoom, onMouseDown, onPortMouseDown, o
     </g>);
 }
 // ─── WF PROPERTIES PANEL ─────────────────────────────────────────────────────
-function WfPropsPanel({ node, nodes, edges, workspaces, formFields, onUpdate, onDelete, }) {
+function WfPropsPanel({ node, nodes, edges, workspaces, allUsers, formFields, onUpdate, onDelete, }) {
     if (!node)
         return (<div className="h-full flex flex-col items-center justify-center text-center px-4">
       <Settings size={28} className="text-[#D1D9E0] mb-3"/>
@@ -375,7 +377,7 @@ function WfPropsPanel({ node, nodes, edges, workspaces, formFields, onUpdate, on
       </div>
       {status !== 'complete' && (<div className={`mx-3 mt-3 px-3 py-2 rounded-lg text-xs flex items-start gap-2 ${status === 'incomplete' ? 'bg-[#FFEDD5] text-[#7C2D12]' : 'bg-[#FEE2E2] text-[#7F1D1D]'}`}>
           <AlertTriangle size={12} className="mt-0.5 flex-shrink-0"/>
-          <span>{status === 'incomplete' ? 'Propriétés manquantes' : 'Connexions manquantes'}</span>
+          <span>{status === 'incomplete' ? 'Propriétés manquantes (Workspace & Responsable)' : 'Connexions manquantes'}</span>
         </div>)}
       <div className="flex-1 p-4 space-y-4">
         <div>
@@ -393,19 +395,27 @@ function WfPropsPanel({ node, nodes, edges, workspaces, formFields, onUpdate, on
         {node.type === 'APPROVAL' && (<>
             <div>
               <label className="block text-xs font-medium text-[#4A5568] mb-1">Workspace responsable <span className="text-[#DC2626]">*</span></label>
-              <select className="w-full px-3 py-2 text-sm border border-[#D1D9E0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79]/30 bg-white" value={node.workspaceId || ''} onChange={e => onUpdate({ ...node, workspaceId: e.target.value || undefined })}>
-                <option value="">Sélectionner…</option>
+              <select className="w-full px-3 py-2 text-sm border border-[#D1D9E0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79]/30 bg-white" value={node.workspaceId || ''} onChange={e => onUpdate({ ...node, workspaceId: e.target.value || undefined, assignedUserId: undefined })}>
+                <option value="">Sélectionner un workspace…</option>
                 {workspaces.filter(w => w.active).map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
             </div>
-            {node.workspaceId && (<div>
-                <label className="block text-xs font-medium text-[#4A5568] mb-1">Assigné à (optionnel)</label>
-                <select className="w-full px-3 py-2 text-sm border border-[#D1D9E0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79]/30 bg-white" value={node.assignedUserId || ''} onChange={e => onUpdate({ ...node, assignedUserId: e.target.value || undefined })}>
-                  <option value="">Tous les membres</option>
-                  {USERS.filter(u => workspaces.find(w => w.id === node.workspaceId)?.memberIds.includes(u.id)).map(u => (<option key={u.id} value={u.id}>{u.name}</option>))}
-                </select>
-                <p className="text-[10px] text-[#8898AA] mt-1">Si vide, n'importe quel membre peut traiter cette étape.</p>
-              </div>)}
+            <div>
+              <label className="block text-xs font-medium text-[#4A5568] mb-1">Responsable assigné <span className="text-[#DC2626]">*</span></label>
+              <select disabled={!node.workspaceId} className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79]/30 ${!node.workspaceId ? 'bg-[#F4F6F8] text-[#8898AA]' : !node.assignedUserId ? 'border-[#EA580C] bg-[#FFFBEB]' : 'border-[#D1D9E0] bg-white'}`} value={node.assignedUserId || ''} onChange={e => onUpdate({ ...node, assignedUserId: e.target.value || undefined })}>
+                <option value="">{node.workspaceId ? 'Sélectionner un responsable...' : 'Sélectionnez d\'abord un workspace'}</option>
+                {(() => {
+                  const ws = workspaces.find(w => w.id === node.workspaceId);
+                  const memberIds = ws?.memberIds || [];
+                  const userPool = (allUsers && allUsers.length > 0) ? allUsers : USERS;
+                  const workspaceUsers = userPool.filter(u => memberIds.includes(u.id) || memberIds.includes(String(u.id)) || memberIds.includes(Number(u.id)));
+                  return workspaceUsers.map(u => (<option key={u.id} value={u.id}>{u.name || (u.prenom + ' ' + u.nom)} ({u.email})</option>));
+                })()}
+              </select>
+              <p className="text-[10px] text-[#8898AA] mt-1">
+                {node.workspaceId ? 'Obligatoire : seuls les membres de ce workspace sont affichés.' : 'Veuillez choisir un workspace pour voir ses employés.'}
+              </p>
+            </div>
             <div>
               <label className="block text-xs font-medium text-[#4A5568] mb-1">SLA (heures)</label>
               <input type="number" min={0} className="w-full px-3 py-2 text-sm border border-[#D1D9E0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79]/30" value={node.slaHours || ''} onChange={e => onUpdate({ ...node, slaHours: parseInt(e.target.value) || undefined })}/>
@@ -458,7 +468,7 @@ function WfPropsPanel({ node, nodes, edges, workspaces, formFields, onUpdate, on
     </div>);
 }
 // ─── WF CANVAS EDITOR ────────────────────────────────────────────────────────
-function WfCanvasEditor({ nodes, edges, workspaces, formFields, onCommit, onUndo, onRedo, canUndo, canRedo, }) {
+function WfCanvasEditor({ nodes, edges, workspaces, allUsers, formFields, onCommit, onUndo, onRedo, canUndo, canRedo, }) {
     const svgRef = useRef(null);
     const [zoom, setZoom] = useState(0.82);
     const [pan, setPan] = useState({ x: 30, y: 10 });
@@ -761,7 +771,7 @@ function WfCanvasEditor({ nodes, edges, workspaces, formFields, onCommit, onUndo
 
       {/* Right properties panel */}
       <div className="w-56 flex-shrink-0 border-l border-[#D1D9E0] bg-white">
-        <WfPropsPanel node={selectedNode} nodes={localNodes} edges={edges} workspaces={workspaces} formFields={formFields} onUpdate={updateNode} onDelete={deleteNode}/>
+        <WfPropsPanel node={selectedNode} nodes={localNodes} edges={edges} workspaces={workspaces} allUsers={allUsers} formFields={formFields} onUpdate={updateNode} onDelete={deleteNode}/>
       </div>
     </div>);
 }
@@ -1465,7 +1475,7 @@ export default function ProcessCreator() {
           </div>) : null}
 
         <div className="flex-1 border border-[#D1D9E0] rounded-xl overflow-hidden bg-white" style={{ minHeight: 520 }}>
-          <WfCanvasEditor nodes={draft.wfNodes} edges={draft.wfEdges} workspaces={workspaces} formFields={draft.formFields} onCommit={wfCommit} onUndo={wfUndo} onRedo={wfRedo} canUndo={undoStack.length > 0} canRedo={redoStack.length > 0}/>
+          <WfCanvasEditor nodes={draft.wfNodes} edges={draft.wfEdges} workspaces={workspaces} allUsers={allUsers} formFields={draft.formFields} onCommit={wfCommit} onUndo={wfUndo} onRedo={wfRedo} canUndo={undoStack.length > 0} canRedo={redoStack.length > 0}/>
         </div>
       </div>);
     }
