@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, FilePlus, ArrowRight, Loader2 } from 'lucide-react';
 import { useRequests } from '../../../app/providers/RequestProvider';
+import RequestTimeline from '../components/RequestTimeline';
+import RequestProgress from '../components/RequestProgress';
 import StatusBadge from '../../../components/StatusBadge';
 import ProcessIcon from '../../processes/components/ProcessIcon';
 
@@ -14,8 +16,9 @@ const STATUS_LABELS = {
 };
 
 export default function RequestsList() {
-    const { requests, loading } = useRequests();
+    const { requests, loading, error, reloadRequests } = useRequests();
     const navigate = useNavigate();
+    useEffect(() => { reloadRequests(true); }, [reloadRequests]);
     const [search, setSearch]           = useState('');
     const [statusFilter, setStatusFilter] = useState('');
 
@@ -41,6 +44,7 @@ export default function RequestsList() {
                 </button>
             </div>
 
+            {error && <p role="alert" className="text-sm text-red-700">{error} <button onClick={() => reloadRequests()} className="underline">Réessayer</button></p>}
             <div className="bg-white border border-[#D1D9E0] rounded-xl overflow-hidden">
                 {/* Filtres */}
                 <div className="px-5 py-3 border-b border-[#D1D9E0] flex items-center gap-3">
@@ -98,10 +102,11 @@ export default function RequestsList() {
                                             ? new Date(r.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
                                             : '—'}
                                     </p>
+                                    <RequestTimeline steps={r.validationSteps} compact/>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
-                                <StatusBadge status={r.status}/>
+                                <div><StatusBadge status={r.status}/><RequestProgress request={r}/></div>
                                 <ArrowRight className="w-4 h-4 text-[#D1D9E0] group-hover:text-[#1F4E79] transition-colors"/>
                             </div>
                         </button>
