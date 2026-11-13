@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, Building2, GitBranch, FileText, ScrollText, LogOut, User, UserCircle } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, GitBranch, FileText, ScrollText, LogOut, UserCircle } from 'lucide-react';
 import { useAuth } from '../../app/providers/AuthProvider';
 import SmartEngineLogo from '../../components/SmartEngineLogo';
 const NAV = [
@@ -34,10 +34,6 @@ export default function AdminSidebar() {
       </nav>
 
       <div className="space-y-0.5 border-t border-white/8 px-3 py-3">
-        <NavLink to="/employee" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-[#16A34A]/20 text-[#4ade80]' : 'text-white/50 hover:text-white hover:bg-white/[0.08]'}`}>
-          <User className="w-4 h-4 flex-shrink-0"/>
-          Mon espace Employé
-        </NavLink>
         <NavLink to="/admin/profile" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-[#1F4E79] text-white' : 'text-white/50 hover:text-white hover:bg-white/[0.08]'}`}>
           <UserCircle className="w-4 h-4 flex-shrink-0"/>
           Mon profil
