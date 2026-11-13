@@ -786,6 +786,7 @@ const STEP_META = [
 ];
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function ProcessCreator() {
+    const { addProcess } = useProcesses();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const stepParam = searchParams.get('step');
@@ -1343,7 +1344,7 @@ export default function ProcessCreator() {
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${ws.active ? 'bg-[#DCFCE7] text-[#14532D]' : 'bg-[#F3F4F6] text-[#6B7280]'}`}>{ws.active ? 'Actif' : 'Inactif'}</span>
               </div>
               <label className="flex items-center gap-2 text-sm text-[#172033] mb-3">
-                <input type="checkbox" disabled={!ws.active} checked={draft.workspaceIds.includes(ws.id)} onChange={e => setDraft(d => ({ ...d, workspaceIds: e.target.checked ? [...d.workspaceIds, ws.id] : d.workspaceIds.filter(id => id !== ws.id) }))} />
+                <input type="checkbox" disabled={!ws.active} checked={draft.workspaceIds.includes(ws.id)} onChange={e => setDraft(d => ({ ...d, workspaceIds: e.target.checked ? [...d.workspaceIds, ws.id] : d.workspaceIds.filter(id => id !== ws.id), wfNodes: e.target.checked ? d.wfNodes : d.wfNodes.map(n => n.workspaceId === ws.id ? { ...n, workspaceId: undefined, assignedUserId: undefined } : n) }))} />
                 Associer au processus
               </label>
               <p className="text-xs text-[#4A5568] mb-3 line-clamp-2">{ws.description}</p>
@@ -1475,7 +1476,7 @@ export default function ProcessCreator() {
           </div>) : null}
 
         <div className="flex-1 border border-[#D1D9E0] rounded-xl overflow-hidden bg-white" style={{ minHeight: 520 }}>
-          <WfCanvasEditor nodes={draft.wfNodes} edges={draft.wfEdges} workspaces={workspaces} allUsers={allUsers} formFields={draft.formFields} onCommit={wfCommit} onUndo={wfUndo} onRedo={wfRedo} canUndo={undoStack.length > 0} canRedo={redoStack.length > 0}/>
+          <WfCanvasEditor nodes={draft.wfNodes} edges={draft.wfEdges} workspaces={workspaces.filter(w => w.active && draft.workspaceIds.includes(w.id))} allUsers={allUsers} formFields={draft.formFields} onCommit={wfCommit} onUndo={wfUndo} onRedo={wfRedo} canUndo={undoStack.length > 0} canRedo={redoStack.length > 0}/>
         </div>
       </div>);
     }
@@ -1578,7 +1579,7 @@ export default function ProcessCreator() {
             {[
                 { label: 'Champs', value: formFieldCount, icon: <List size={14} className="text-[#1F4E79]"/> },
                 { label: 'Étapes workflow', value: wfNodeCount, icon: <GitBranch size={14} className="text-[#1F4E79]"/> },
-                { label: 'Workspaces', value: workspaces.filter(w => w.active).length, icon: <Building2 size={14} className="text-[#1F4E79]"/> },
+                { label: 'Workspaces', value: workspaces.filter(w => w.active && draft.workspaceIds.includes(w.id)).length, icon: <Building2 size={14} className="text-[#1F4E79]"/> },
             ].map(s => (<div key={s.label} className="p-4 text-center">
                 <div className="flex justify-center mb-1">{s.icon}</div>
                 <p className="text-xl font-bold text-[#172033]">{s.value}</p>
