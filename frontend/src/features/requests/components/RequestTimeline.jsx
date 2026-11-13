@@ -1,48 +1,50 @@
-import { Check, X, Clock, SkipForward } from 'lucide-react';
-const STEP_ICON = {
-    APPROVED: { icon: Check, bg: 'bg-[#16A34A]', ring: 'ring-[#DCFCE7]' },
-    REJECTED: { icon: X, bg: 'bg-[#DC2626]', ring: 'ring-[#FEE2E2]' },
-    IN_PROGRESS: { icon: Clock, bg: 'bg-[#1F4E79]', ring: 'ring-[#C5D9EE]' },
-    PENDING: { icon: Clock, bg: 'bg-[#D1D9E0]', ring: 'ring-[#F4F6F8]' },
-    SKIPPED: { icon: SkipForward, bg: 'bg-[#94A3B8]', ring: 'ring-[#F1F5F9]' },
+import { ArrowRight, Check, X, Clock, SkipForward, GitBranch } from 'lucide-react';
+const STATES = {
+    APPROUVEE: { icon: Check, label: 'Approuvée', style: 'border-green-200 bg-green-50', iconStyle: 'bg-green-600' },
+    REFUSEE: { icon: X, label: 'Refusée', style: 'border-red-200 bg-red-50', iconStyle: 'bg-red-600' },
+    EN_COURS: { icon: Clock, label: 'En cours de traitement', style: 'border-blue-400 bg-blue-50 ring-1 ring-blue-200', iconStyle: 'bg-[#1F4E79]', current: true },
+    EN_ATTENTE: { icon: Clock, label: 'En attente de validation', style: 'border-blue-400 bg-blue-50 ring-1 ring-blue-200', iconStyle: 'bg-[#1F4E79]', current: true },
+    ANNULEE: { icon: SkipForward, label: 'Annulée', style: 'border-slate-200 bg-slate-50', iconStyle: 'bg-slate-400' },
+    A_VENIR: { icon: Clock, label: 'À venir si approuvée', style: 'border-dashed border-slate-300 bg-white', iconStyle: 'bg-slate-400' },
+    CONDITION_A_VENIR: { icon: GitBranch, label: 'Suite du parcours selon le résultat de cette condition', style: 'border-dashed border-violet-200 bg-violet-50', iconStyle: 'bg-violet-500' },
 };
-function formatDate(iso) {
-    if (!iso)
-        return null;
-    return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+function formatDate(value) {
+    return new Date(value).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
-export default function Timeline({ steps }) {
-    return (<div className="relative">
-      {steps.map((step, idx) => {
-            const cfg = STEP_ICON[step.status] ?? STEP_ICON.PENDING;
+export default function RequestTimeline({ steps = [], compact = false }) {
+    if (compact) return <span className="mt-3 flex flex-wrap items-center gap-2" aria-label="Parcours par workspace">
+        {steps.map((step, index) => {
+            const cfg = STATES[step.status] ?? { ...STATES.A_VENIR, label: step.status };
             const Icon = cfg.icon;
-            const isLast = idx === steps.length - 1;
-            return (<div key={step.id} className="flex gap-4">
-            <div className="flex flex-col items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ring-4 ${cfg.bg} ${cfg.ring} flex-shrink-0 z-10`}>
-                <Icon className="w-4 h-4 text-white" strokeWidth={2.5}/>
-              </div>
-              {!isLast && <div className="w-0.5 flex-1 bg-[#D1D9E0] my-1"/>}
-            </div>
-            <div className={`pb-6 ${isLast ? '' : ''} min-w-0 flex-1`}>
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold text-[#172033] text-sm">{step.nodeLabel}</p>
-                  {step.workspaceName && (<p className="text-xs text-[#8898AA] mt-0.5">Espace : {step.workspaceName}</p>)}
-                  {step.assignedTo && (<p className="text-xs text-[#4A5568] mt-0.5">Par : {step.assignedTo}</p>)}
-                  {step.comment && (<div className="mt-2 px-3 py-2 bg-[#F4F6F8] rounded-lg text-sm text-[#4A5568] border border-[#D1D9E0] italic">
-                      "{step.comment}"
-                    </div>)}
-                </div>
-                <div className="text-right flex-shrink-0">
-                  {step.slaHours ? (<span className="text-[11px] text-[#8898AA]">SLA : {step.slaHours}h</span>) : null}
-                  {(step.completedAt || step.startedAt) && (<p className="text-[11px] text-[#8898AA] mt-0.5">
-                      {formatDate(step.completedAt ?? step.startedAt)}
-                    </p>)}
-                </div>
-              </div>
-            </div>
-          </div>);
+            return <span key={step.id} className="inline-flex items-center gap-2">
+                {index > 0 && <ArrowRight size={14} className="text-slate-400" aria-hidden="true"/>}
+                <span className={"inline-flex items-center gap-2 rounded-lg border px-2 py-1 text-xs " + cfg.style}>
+                    <Icon size={14}/><span><strong>{step.workspaceName || step.nodeLabel}</strong><span className="block">{cfg.label}</span></span>
+                </span>
+            </span>;
         })}
-    </div>);
+    </span>;
+    return <ol aria-label="Parcours de validation par workspace" className="space-y-0">
+        {steps.map((step, index) => {
+            const cfg = STATES[step.status] ?? { ...STATES.A_VENIR, label: step.status };
+            const Icon = cfg.icon;
+            return <li key={step.id} aria-current={cfg.current ? 'step' : undefined} className="flex gap-3">
+                <div className="flex flex-col items-center shrink-0">
+                    <span className={'flex h-8 w-8 items-center justify-center rounded-full text-white ' + cfg.iconStyle}><Icon size={16}/></span>
+                    {index < steps.length - 1 && <span aria-hidden="true" className="w-0.5 flex-1 min-h-5 bg-slate-200"/>}
+                </div>
+                <div className={'mb-4 min-w-0 flex-1 rounded-xl border p-4 ' + cfg.style}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-bold text-[#172033]">{index + 1}. {step.workspaceName || step.nodeLabel}</p>
+                        {cfg.current && <span className="rounded-full bg-[#1F4E79] px-2 py-0.5 text-xs font-semibold text-white">Étape actuelle</span>}
+                    </div>
+                    {step.workspaceName && <p className="mt-1 text-xs text-slate-500">{step.nodeLabel}</p>}
+                    <p className="mt-2 text-sm font-medium">{cfg.label}</p>
+                    {(step.completedAt || step.startedAt) && <p className="mt-2 text-xs text-slate-500">
+                        {step.completedAt ? 'Décision le ' : 'Reçue le '}{formatDate(step.completedAt || step.startedAt)}
+                    </p>}
+                </div>
+            </li>;
+        })}
+    </ol>;
 }
