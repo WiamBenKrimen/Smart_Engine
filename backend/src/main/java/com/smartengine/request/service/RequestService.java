@@ -69,7 +69,7 @@ public class RequestService {
     public List<DemandeResponse> getMesDemandes(String email) {
         return demandeRepository.findByCreePar_EmailOrderByDateCreationDesc(email)
                 .stream()
-                .map(DemandeResponse::from)
+                .map(this::toResponse)
                 .toList();
     }
 
@@ -81,7 +81,7 @@ public class RequestService {
         if (!demande.getCreePar().getEmail().equals(email)) {
             throw new EntityNotFoundException("Demande introuvable : " + id);
         }
-        return DemandeResponse.from(demande);
+        return toResponse(demande);
     }
 
     /** Crée et soumet une nouvelle demande, initialise l'instance de workflow et crée la première tâche. */
@@ -168,7 +168,7 @@ public class RequestService {
             "Demande " + demande.getReferenceDemande() + " (" + processus.getNom() + ") soumise par " + employe.getPrenom() + " " + employe.getNom()
         );
 
-        return DemandeResponse.from(demande);
+        return toResponse(demande);
     }
 
     /** Retourne les KPIs du tableau de bord de l'employé. */
@@ -182,6 +182,47 @@ public class RequestService {
     }
 
     // ── Utilitaires ──────────────────────────────────────────────────────────
+
+    private DemandeResponse toResponse(Demande demande) {
+        var tasks = new java.util.ArrayList<>(
+                tacheRepository.findByInstance_Demande_IdOrderByDateCreationDesc(demande.getId()));
+        tasks.sort(java.util.Comparator.comparing(Tache::getDateCreation).thenComparing(Tache::getId));
+        var steps = new java.util.ArrayList<>(tasks.stream()
+                .map(DemandeResponse.ValidationStep::from).toList());
+        if (demande.getStatut() == StatutDemande.EN_COURS && !tasks.isEmpty()) {
+            Tache current = tasks.get(tasks.size() - 1);
+            Workflow workflow = current.getInstance() != null
+                    ? current.getInstance().getWorkflow() : demande.getProcessus().getWorkflow();
+            if (workflow != null && (current.getStatut() == StatutTache.EN_ATTENTE
+                    || current.getStatut() == StatutTache.EN_COURS)) {
+                var links = lienWorkflowRepository.findByWorkflow_Id(workflow.getId());
+                var visited = new java.util.HashSet<Long>();
+                tasks.forEach(t -> visited.add(t.getNoeud().getId()));
+                NoeudWorkflow node = current.getNoeud();
+                while (node != null) {
+                    Long sourceId = node.getId();
+                    var nextLinks = links.stream().filter(l -> l.getNoeudSource().getId().equals(sourceId))
+                            .filter(l -> l.getTypeBranche() == com.smartengine.workflow.entity.TypeBranche.APPROVED
+                                    || l.getTypeBranche() == com.smartengine.workflow.entity.TypeBranche.DEFAULT)
+                            .toList();
+                    if (nextLinks.size() != 1) break;
+                    node = nextLinks.get(0).getNoeudCible();
+                    if (!visited.add(node.getId()) || node.getTypeNoeud() == TypeNoeud.END) break;
+                    if (node.getTypeNoeud() == TypeNoeud.CONDITION) {
+                        steps.add(new DemandeResponse.ValidationStep(-node.getId(), node.getLibelle(),
+                                null, "CONDITION_A_VENIR", null, null));
+                        break;
+                    }
+                    if (node.getTypeNoeud() == TypeNoeud.APPROVAL) {
+                        steps.add(new DemandeResponse.ValidationStep(-node.getId(), node.getLibelle(),
+                                node.getEspace() == null ? null : node.getEspace().getNom(),
+                                "A_VENIR", null, null));
+                    }
+                }
+            }
+        }
+        return DemandeResponse.withSteps(demande, steps);
+    }
 
     private String generateReference() {
         int year = Year.now().getValue();
