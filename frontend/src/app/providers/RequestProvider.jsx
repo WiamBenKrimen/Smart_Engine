@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { requestApi } from '../../api/requestApi';
 import { useAuth } from './AuthProvider';
 
@@ -6,6 +6,7 @@ const RequestContext = createContext(null);
 
 export function RequestProvider({ children }) {
     const { currentUser } = useAuth();
+    const reloadVersion = useRef(0);
     const [requests, setRequests] = useState([]);
     const [loading, setLoading]   = useState(false);
     const [error, setError]       = useState(null);
@@ -23,22 +24,26 @@ export function RequestProvider({ children }) {
             dataJson:    d.dataJson,
             createdAt:   d.dateCreation,
             dateFin:     d.dateFin,
+            validationSteps: d.validationSteps ?? [],
         };
     }
 
-    const reloadRequests = useCallback(async () => {
+    const reloadRequests = useCallback(async (background = false) => {
         if (!currentUser) return;          // pas connecté → rien à charger
+        const version = ++reloadVersion.current;
         try {
-            setLoading(true);
+            if (!background) setLoading(true);
             const rows = await requestApi.listMine();
+            if (version !== reloadVersion.current) return;
             setRequests(Array.isArray(rows) ? rows.map(normalize) : []);
             setError(null);
         } catch (err) {
+            if (version !== reloadVersion.current) return;
             console.warn('Impossible de charger les demandes :', err);
             setError(err.message);
-            setRequests([]);
+            if (!background) setRequests([]);
         } finally {
-            setLoading(false);
+            if (version === reloadVersion.current) setLoading(false);
         }
     }, [currentUser]);   // ← se recalcule à chaque changement d'utilisateur
 
@@ -50,6 +55,16 @@ export function RequestProvider({ children }) {
             return;
         }
         reloadRequests();
+        const refresh = () => { if (document.visibilityState !== 'hidden') reloadRequests(true); };
+        const timer = setInterval(refresh, 10000);
+        window.addEventListener('focus', refresh);
+        window.addEventListener('smart-engine-task-decision', refresh);
+        return () => {
+            ++reloadVersion.current;
+            clearInterval(timer);
+            window.removeEventListener('focus', refresh);
+            window.removeEventListener('smart-engine-task-decision', refresh);
+        };
     }, [currentUser, reloadRequests]);   // ← se relance quand l'utilisateur change
 
     /** Soumet une nouvelle demande. Renvoie la référence ou '' en cas d'échec. */
