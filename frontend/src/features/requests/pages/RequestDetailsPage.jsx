@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Clock, User, FileText, Loader2 } from 'lucide-react';
 import { useRequests } from '../../../app/providers/RequestProvider';
 import { requestApi } from '../../../api/requestApi';
+import RequestProgress from '../components/RequestProgress';
+import RequestTimeline from '../components/RequestTimeline';
 import StatusBadge from '../../../components/StatusBadge';
 import ProcessIcon from '../../processes/components/ProcessIcon';
 
@@ -26,34 +28,41 @@ export default function RequestDetail() {
     const [fetchError, setFetchError] = useState('');
 
     useEffect(() => {
-        if (fromList) {
-            setRequest(fromList);
-            setFetching(false);
-            return;
-        }
-        // Si l'ID n'est pas dans la liste (navigation directe), on charge via l'API
-        setFetching(true);
-        requestApi.getById(id)
-            .then(d => {
+        let cancelled = false;
+        async function load() {
+            try {
+                const d = await requestApi.getById(id);
+                if (cancelled) return;
                 setRequest({
-                    id:          String(d.id),
-                    reference:   d.referenceDemande,
-                    processId:   String(d.processusId),
-                    processName: d.processusNom,
-                    processIcon: d.processusIcon,
-                    status:      d.statut,
-                    priority:    d.priorite,
-                    dataJson:    d.dataJson,
-                    createdAt:   d.dateCreation,
-                    dateFin:     d.dateFin,
+                    id: String(d.id), reference: d.referenceDemande,
+                    processId: String(d.processusId), processName: d.processusNom,
+                    processIcon: d.processusIcon, status: d.statut,
+                    priority: d.priorite, dataJson: d.dataJson,
+                    createdAt: d.dateCreation, dateFin: d.dateFin,
+                    validationSteps: d.validationSteps ?? [],
                 });
-            })
-            .catch(() => setFetchError('Demande introuvable ou accès refusé.'))
-            .finally(() => setFetching(false));
-    }, [id, fromList]);
+                setFetchError('');
+            } catch {
+                if (!cancelled) setFetchError('Impossible de charger le suivi de cette demande.');
+            } finally {
+                if (!cancelled) setFetching(false);
+            }
+        }
+        setFetching(true);
+        load();
+        const refresh = () => { if (document.visibilityState !== 'hidden') load(); };
+        const timer = setInterval(refresh, 10000);
+        window.addEventListener('focus', refresh);
+        window.addEventListener('smart-engine-task-decision', refresh);
+        return () => {
+            cancelled = true; clearInterval(timer);
+            window.removeEventListener('focus', refresh);
+            window.removeEventListener('smart-engine-task-decision', refresh);
+        };
+    }, [id]);
 
     // ── États de chargement / erreur ─────────────────────────────────────
-    if (fetching || listLoading) {
+    if (fetching) {
         return (
             <div className="flex items-center justify-center gap-2 py-24 text-[#8898AA] text-sm">
                 <Loader2 className="w-5 h-5 animate-spin"/> Chargement…
@@ -139,6 +148,15 @@ export default function RequestDetail() {
                 </div>
             </div>
 
+            <section className="bg-white border border-[#D1D9E0] rounded-xl p-5">
+                <h2 className="font-semibold text-[#172033] text-sm">Suivi des validations</h2>
+                <RequestProgress request={request}/>
+                <div className="mt-5">
+                    {request.validationSteps?.length
+                        ? <RequestTimeline steps={request.validationSteps}/>
+                        : <p className="text-sm text-[#8898AA]">Aucune étape de validation enregistrée.</p>}
+                </div>
+            </section>
             {/* Données du formulaire */}
             <div className="bg-white border border-[#D1D9E0] rounded-xl p-5">
                 <div className="flex items-center gap-2 mb-4">
