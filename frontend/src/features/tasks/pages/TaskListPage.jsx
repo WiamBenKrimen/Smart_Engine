@@ -69,6 +69,7 @@ export default function TaskListPage() {
         await taskApi.reject(selectedTask.id, decisionComment);
         setFeedback({ type: 'success', message: `La demande ${selectedTask.demandeReference || ''} a été refusée.` });
       }
+      window.dispatchEvent(new Event('smart-engine-task-decision'));
       setSelectedTask(null);
       setDecisionComment('');
       loadTasks();
